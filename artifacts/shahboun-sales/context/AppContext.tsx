@@ -133,12 +133,32 @@ export interface AuditEntry {
   user: string;
 }
 
+export interface StoreProfile {
+  storeName: string;
+  ownerName: string;
+  phone: string;
+  whatsapp: string;
+  city: string;
+  address: string;
+  activityType: string;
+  email: string;
+  /** شعار متجر الزبون (اختياري) — منفصل تمامًا عن شعار منظومة شهبون الثابت */
+  logoUri: string | null;
+}
+
+export const emptyStoreProfile = (): StoreProfile => ({
+  storeName: '', ownerName: '', phone: '', whatsapp: '', city: '', address: '', activityType: '', email: '', logoUri: null,
+});
+
 export interface AppState {
   version: number;
   passwordHash: string;
   mustChangePassword: boolean;
   loggedInUser: string | null;
-  businessName: string;
+  /** بيانات متجر الزبون — قابلة للتعديل وتظهر في الفواتير والتقارير */
+  storeProfile: StoreProfile;
+  /** هل أُكمل الإعداد الأولي عند أول تشغيل؟ */
+  setupComplete: boolean;
   usdRate: number;
   products: Product[];
   customers: Customer[];
@@ -173,10 +193,13 @@ interface AppContextValue {
   closeShift: (closingBalance: number, notes: string) => void;
   setTheme: (mode: ThemeMode, name: ThemeName) => void;
   setUsdRate: (rate: number) => void;
+  completeSetup: (profile: StoreProfile) => void;
+  updateStoreProfile: (values: Partial<StoreProfile>) => void;
   shareBackupText: () => string;
 }
 
-const STORAGE_KEY = '@shahboun_sales_state_v2';
+const STORAGE_KEY = '@shahboun_sales_state_v3';
+const LEGACY_STORAGE_KEY = '@shahboun_sales_state_v2';
 
 const hashPassword = (password: string) => {
   let hash = 2166136261;
@@ -189,39 +212,23 @@ const hashPassword = (password: string) => {
 
 const uid = (prefix: string) => `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
-const seedProducts: Product[] = [
-  { id: 'p1', name: 'زيت محرك 10W40', sku: 'SH-1001', barcode: '6281001001', category: 'زيوت', unit: 'علبة', purchasePrice: 32, salePrice: 45, wholesalePrice: 41, stock: 18, minimumStock: 5, shelf: 'A-01', active: true, usdLinked: false },
-  { id: 'p2', name: 'فلتر هواء أصلي', sku: 'SH-1002', barcode: '6281001002', category: 'قطع غيار', unit: 'قطعة', purchasePrice: 18, salePrice: 29, wholesalePrice: 26, stock: 7, minimumStock: 8, shelf: 'B-03', active: true, usdLinked: false },
-  { id: 'p3', name: 'سائل تبريد أخضر', sku: 'SH-1003', barcode: '6281001003', category: 'سوائل', unit: 'عبوة', purchasePrice: 12, salePrice: 19, wholesalePrice: 17, stock: 31, minimumStock: 6, shelf: 'A-04', active: true, usdLinked: false },
-  { id: 'p4', name: 'شاحن سيارة سريع', sku: 'SH-1004', barcode: '6281001004', category: 'إكسسوارات', unit: 'قطعة', purchasePrice: 24, salePrice: 39, wholesalePrice: 35, stock: 4, minimumStock: 6, shelf: 'C-02', active: true, usdLinked: true },
-  { id: 'p5', name: 'مناديل تنظيف داخلية', sku: 'SH-1005', barcode: '6281001005', category: 'عناية', unit: 'علبة', purchasePrice: 6, salePrice: 10, wholesalePrice: 9, stock: 46, minimumStock: 10, shelf: 'D-01', active: true, usdLinked: false },
-];
-
+// النسخة التجارية تبدأ فارغة تمامًا — لا بيانات تجريبية. المستخدم الافتراضي admin فقط.
 const initialState = (): AppState => ({
-  version: 2,
+  version: 3,
   passwordHash: hashPassword('admin'),
   mustChangePassword: true,
   loggedInUser: null,
-  businessName: 'منظومة شهبون للمبيعات',
+  storeProfile: emptyStoreProfile(),
+  setupComplete: false,
   usdRate: 4.85,
-  products: seedProducts,
-  customers: [
-    { id: 'c1', name: 'شركة المدار', phone: '091 222 4411', address: 'طرابلس', balance: 340 },
-    { id: 'c2', name: 'محمود الفيتوري', phone: '092 700 1821', address: 'بنغازي', balance: 0 },
-  ],
-  suppliers: [
-    { id: 's1', name: 'مورد الخليج', phone: '091 555 1987', address: 'طرابلس', balance: 860 },
-    { id: 's2', name: 'شركة الإمداد', phone: '092 445 2100', address: 'مصراتة', balance: 0 },
-  ],
-  sales: [
-    { id: 'sale_seed', invoiceNumber: 'INV-1048', createdAt: new Date().toISOString(), items: [{ productId: 'p1', name: 'زيت محرك 10W40', quantity: 2, unitPrice: 45, total: 90 }], subtotal: 90, discount: 0, total: 90, paid: 90, paymentMethod: 'نقدي', user: 'admin' },
-  ],
+  products: [],
+  customers: [],
+  suppliers: [],
+  sales: [],
   purchases: [],
   returns: [],
   shifts: [],
-  expenses: [
-    { id: 'e1', title: 'مصاريف نقل', category: 'تشغيل', amount: 120, createdAt: new Date().toISOString() },
-  ],
+  expenses: [],
   audit: [],
   themeMode: 'system',
   themeName: 'classic',
@@ -234,18 +241,31 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    AsyncStorage.getItem(STORAGE_KEY)
-      .then((value) => {
+    (async () => {
+      try {
+        const value = await AsyncStorage.getItem(STORAGE_KEY);
         if (value) {
-          try {
-            const parsed = JSON.parse(value) as Partial<AppState>;
-            setState({ ...initialState(), ...parsed });
-          } catch {
-            setState(initialState());
-          }
+          const parsed = JSON.parse(value) as Partial<AppState> & { businessName?: string };
+          delete parsed.businessName; // اسم البرنامج ثابت — لم يعد جزءًا من الحالة
+          setState({ ...initialState(), ...parsed, storeProfile: { ...emptyStoreProfile(), ...(parsed.storeProfile ?? {}) } });
+          return;
         }
-      })
-      .finally(() => setLoading(false));
+        // ترحيل من الإصدار السابق (v2): نحافظ على بيانات المستخدم، ويظهر الإعداد الأولي مرة واحدة
+        const legacy = await AsyncStorage.getItem(LEGACY_STORAGE_KEY);
+        if (legacy) {
+          const parsed = JSON.parse(legacy) as Partial<AppState> & { businessName?: string };
+          delete parsed.businessName;
+          const migrated: AppState = { ...initialState(), ...parsed, storeProfile: emptyStoreProfile(), setupComplete: false, version: 3 };
+          // كتابة فورية لمفتاح v3 حتى لا يتكرر الترحيل إذا انقطع التطبيق قبل أول حفظ عادي
+          await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
+          setState(migrated);
+        }
+      } catch {
+        setState(initialState());
+      } finally {
+        setLoading(false);
+      }
+    })();
   }, []);
 
   useEffect(() => {
@@ -383,12 +403,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const setUsdRate = useCallback((rate: number) => setState((cur) => ({ ...cur, usdRate: rate, audit: [addAudit('سعر الدولار', rate.toFixed(2), cur), ...cur.audit] })), [addAudit]);
   const shareBackupText = useCallback(() => JSON.stringify({ exportedAt: new Date().toISOString(), app: 'Shahboun Sales', version: state.version, state }), [state]);
 
+  const completeSetup = useCallback((profile: StoreProfile) => {
+    setState((cur) => ({ ...cur, storeProfile: profile, setupComplete: true, audit: [addAudit('إعداد أولي', `تسجيل بيانات المتجر: ${profile.storeName}`, cur), ...cur.audit] }));
+  }, [addAudit]);
+
+  const updateStoreProfile = useCallback((values: Partial<StoreProfile>) => {
+    setState((cur) => ({ ...cur, storeProfile: { ...cur.storeProfile, ...values }, audit: [addAudit('تعديل بيانات المتجر', Object.keys(values).join('، '), cur), ...cur.audit] }));
+  }, [addAudit]);
+
   const value = useMemo(() => ({
     state, loading, login, changePassword, logout,
     addProduct, updateProduct, addCustomer, addSupplier, addExpense,
     completeSale, addPurchase, addReturn, collectFromCustomer, payToSupplier,
-    openShift, closeShift, setTheme, setUsdRate, shareBackupText,
-  }), [state, loading, login, changePassword, logout, addProduct, updateProduct, addCustomer, addSupplier, addExpense, completeSale, addPurchase, addReturn, collectFromCustomer, payToSupplier, openShift, closeShift, setTheme, setUsdRate, shareBackupText]);
+    openShift, closeShift, setTheme, setUsdRate, shareBackupText, completeSetup, updateStoreProfile,
+  }), [state, loading, login, changePassword, logout, addProduct, updateProduct, addCustomer, addSupplier, addExpense, completeSale, addPurchase, addReturn, collectFromCustomer, payToSupplier, openShift, closeShift, setTheme, setUsdRate, shareBackupText, completeSetup, updateStoreProfile]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }

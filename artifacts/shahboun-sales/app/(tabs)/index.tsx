@@ -4,7 +4,10 @@ import * as Haptics from 'expo-haptics';
 import React, { useEffect, useState } from 'react';
 import { Alert, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { CartLine, Customer, PaymentMethod, Product, PurchaseLine, SaleReturn, Supplier, ThemeMode, ThemeName, useApp } from '@/context/AppContext';
+import * as ImagePicker from 'expo-image-picker';
+import { Image } from 'expo-image';
+import { CartLine, Customer, PaymentMethod, Product, PurchaseLine, SaleReturn, StoreProfile, Supplier, ThemeMode, ThemeName, emptyStoreProfile, useApp } from '@/context/AppContext';
+import { APP_BRAND } from '@/constants/appInfo';
 import { useColors } from '@/hooks/useColors';
 import { EmptyState, IconButton, LoadingState, Pill, PrimaryButton, SectionTitle, StatCard, Surface, TextField } from '@/components/ShahbounUi';
 
@@ -17,8 +20,65 @@ const formatDateShort = (v: string) => new Intl.DateTimeFormat('ar', { day: 'num
 export default function AppHome() {
   const { state, loading } = useApp();
   if (loading) return <LoadingState />;
-  if (!state.loggedInUser) return <LoginScreen />;
+  if (!state.setupComplete) return <SetupScreen />;
+  // يبقى المستخدم في شاشة الدخول حتى يغيّر كلمة المرور الافتراضية
+  if (!state.loggedInUser || state.mustChangePassword) return <LoginScreen />;
   return <AuthenticatedApp />;
+}
+
+// ─── الإعداد الأولي (أول تشغيل فقط) ───────────────────────────────────────────
+function SetupScreen() {
+  const colors = useColors();
+  const { completeSetup } = useApp();
+  const insets = useSafeAreaInsets();
+  const [profile, setProfile] = useState<StoreProfile>(emptyStoreProfile());
+  const [message, setMessage] = useState('');
+  const set = (key: keyof StoreProfile) => (value: string) => setProfile((p) => ({ ...p, [key]: value }));
+
+  const pickLogo = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.8, allowsEditing: true, aspect: [1, 1] });
+    if (!result.canceled && result.assets[0]) setProfile((p) => ({ ...p, logoUri: result.assets[0].uri }));
+  };
+
+  const submit = () => {
+    if (!profile.storeName.trim()) { setMessage('اسم النشاط مطلوب.'); return; }
+    if (!profile.ownerName.trim()) { setMessage('اسم المالك مطلوب.'); return; }
+    if (!profile.phone.trim()) { setMessage('رقم الهاتف مطلوب.'); return; }
+    completeSetup({ ...profile, storeName: profile.storeName.trim(), ownerName: profile.ownerName.trim(), phone: profile.phone.trim() });
+  };
+
+  return <SafeAreaView style={[styles.loginRoot, { backgroundColor: colors.primary, paddingTop: insets.top + 10 }]}>
+    <ScrollView contentContainerStyle={{ paddingBottom: 30 }} showsVerticalScrollIndicator={false}>
+      <View style={styles.loginBrand}>
+        <Image source={APP_BRAND.logo} style={{ width: 74, height: 74, borderRadius: 18 }} contentFit="contain" />
+        <Text style={styles.loginTitle}>{APP_BRAND.name}</Text>
+        <Text style={styles.loginSubtitle}>خطوة واحدة قبل البدء — سجّل بيانات متجرك</Text>
+      </View>
+      <View style={[styles.loginCard, { backgroundColor: colors.card }]}>
+        <Text style={[styles.loginCardTitle, { color: colors.foreground }]}>بيانات النشاط</Text>
+        <Text style={[styles.loginCardHint, { color: colors.mutedForeground }]}>تظهر هذه البيانات في فواتيرك وتقاريرك، ويمكن تعديلها لاحقًا من الإعدادات.</Text>
+        <TextField label="اسم النشاط / المتجر *" value={profile.storeName} onChangeText={set('storeName')} placeholder="مثال: متجر النخبة لقطع الغيار" />
+        <TextField label="اسم المالك *" value={profile.ownerName} onChangeText={set('ownerName')} placeholder="الاسم الكامل" />
+        <TextField label="رقم الهاتف *" value={profile.phone} onChangeText={set('phone')} keyboardType="phone-pad" placeholder="09x xxx xxxx" />
+        <TextField label="رقم واتساب (اختياري)" value={profile.whatsapp} onChangeText={set('whatsapp')} keyboardType="phone-pad" placeholder="إن كان مختلفًا عن الهاتف" />
+        <TextField label="المدينة" value={profile.city} onChangeText={set('city')} placeholder="مثال: طرابلس" />
+        <TextField label="العنوان" value={profile.address} onChangeText={set('address')} placeholder="الشارع / المنطقة" />
+        <TextField label="نوع النشاط" value={profile.activityType} onChangeText={set('activityType')} placeholder="مثال: قطع غيار سيارات" />
+        <TextField label="البريد الإلكتروني (اختياري)" value={profile.email} onChangeText={set('email')} keyboardType="email-address" autoCapitalize="none" placeholder="name@example.com" />
+        <Pressable onPress={pickLogo} style={[styles.settingRow, { borderWidth: 1, borderColor: colors.border, borderRadius: 12, paddingHorizontal: 12 }]}>
+          {profile.logoUri
+            ? <Image source={{ uri: profile.logoUri }} style={{ width: 44, height: 44, borderRadius: 10 }} contentFit="cover" />
+            : <View style={[styles.settingIcon, { backgroundColor: colors.secondary }]}><Ionicons name="image-outline" size={20} color={colors.secondaryForeground} /></View>}
+          <View style={styles.rowGrow}>
+            <Text style={[styles.rowTitle, { color: colors.foreground }]}>شعار المتجر (اختياري)</Text>
+            <Text style={[styles.rowSubtitle, { color: colors.mutedForeground }]}>{profile.logoUri ? 'تم اختيار الشعار — اضغط للتغيير' : 'يظهر في فواتيرك، وليس شعار المنظومة'}</Text>
+          </View>
+        </Pressable>
+        {message ? <Text style={[styles.loginMessage, { color: colors.destructive }]}>{message}</Text> : null}
+        <PrimaryButton title="حفظ ومتابعة" icon="checkmark-circle-outline" onPress={submit} />
+      </View>
+    </ScrollView>
+  </SafeAreaView>;
 }
 
 // ─── Login ────────────────────────────────────────────────────────────────────
@@ -31,23 +91,24 @@ function LoginScreen() {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [message, setMessage] = useState('');
-  const [changing, setChanging] = useState(false);
+  const [changed, setChanged] = useState(false);
+  // تظهر شاشة تغيير كلمة المرور إجباريًا بعد أول دخول ناجح
+  const changing = !changed && !!state.loggedInUser && state.mustChangePassword;
 
   const submitLogin = async () => {
     const result = await login(username, password);
     setMessage(result.message);
-    if (result.ok && state.mustChangePassword) setChanging(true);
   };
   const submitPassword = async () => {
     if (newPassword !== confirmPassword) { setMessage('كلمتا المرور غير متطابقتين.'); return; }
     const result = await changePassword(newPassword);
     setMessage(result.message);
-    if (result.ok) setChanging(false);
+    if (result.ok) setChanged(true);
   };
 
   return <SafeAreaView style={[styles.loginRoot, { backgroundColor: colors.primary, paddingTop: insets.top + 18 }]}>
     <View style={styles.loginGlowOne} /><View style={styles.loginGlowTwo} />
-    <View style={styles.loginBrand}><View style={styles.logoMark}><Ionicons name="storefront" size={31} color={colors.accent} /></View><Text style={styles.loginTitle}>منظومة شهبون</Text><Text style={styles.loginSubtitle}>إدارة المبيعات بوضوح وسرعة</Text></View>
+    <View style={styles.loginBrand}><Image source={APP_BRAND.logo} style={{ width: 74, height: 74, borderRadius: 18 }} contentFit="contain" /><Text style={styles.loginTitle}>{APP_BRAND.name}</Text><Text style={styles.loginSubtitle}>{state.storeProfile.storeName || 'إدارة المبيعات بوضوح وسرعة'}</Text></View>
     <View style={[styles.loginCard, { backgroundColor: colors.card }]}>
       {changing
         ? <><Text style={[styles.loginCardTitle, { color: colors.foreground }]}>تأمين حساب المدير</Text><Text style={[styles.loginCardHint, { color: colors.mutedForeground }]}>هذه أول مرة تدخل فيها. اختر كلمة مرور جديدة للمتابعة.</Text><TextField label="كلمة المرور الجديدة" value={newPassword} onChangeText={setNewPassword} secureTextEntry placeholder="ستة أحرف على الأقل" autoCapitalize="none" /><TextField label="تأكيد كلمة المرور" value={confirmPassword} onChangeText={setConfirmPassword} secureTextEntry placeholder="أعد كتابة كلمة المرور" autoCapitalize="none" /><PrimaryButton title="حفظ ومتابعة" icon="shield-checkmark-outline" onPress={submitPassword} /></>
@@ -73,7 +134,7 @@ function AuthenticatedApp() {
 
   return <SafeAreaView style={[styles.root, { backgroundColor: colors.background }]} edges={['top']}>
     <View style={styles.topBar}>
-      <View><Text style={[styles.topEyebrow, { color: colors.mutedForeground }]}>{state.businessName}</Text><Text style={[styles.topTitle, { color: colors.foreground }]}>{titles[screen]}</Text></View>
+      <View><Text style={[styles.topEyebrow, { color: colors.mutedForeground }]}>{state.storeProfile.storeName || APP_BRAND.name}</Text><Text style={[styles.topTitle, { color: colors.foreground }]}>{titles[screen]}</Text></View>
       <View style={styles.topActions}>
         <Text style={[styles.clock, { color: colors.foreground }]}>{clock.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</Text>
         {activeShift && <View style={[styles.shiftBadge, { backgroundColor: `${colors.success}20` }]}><Ionicons name="time-outline" size={12} color={colors.success} /><Text style={[styles.shiftBadgeText, { color: colors.success }]}>وردية</Text></View>}
@@ -479,6 +540,13 @@ function InvoicesScreen() {
           <View style={{ alignItems: 'flex-end' }}><Text style={[styles.saleAmount, { color: colors.foreground }]}>{money(sale.total)}</Text><Ionicons name={isOpen ? 'chevron-up' : 'chevron-down'} size={14} color={colors.mutedForeground} /></View>
         </Pressable>
         {isOpen && <View style={[styles.invoiceDetails, { borderTopColor: colors.border }]}>
+          <View style={[styles.invoiceDetailRow, { alignItems: 'center', gap: 8, marginBottom: 6 }]}>
+            {state.storeProfile.logoUri ? <Image source={{ uri: state.storeProfile.logoUri }} style={{ width: 30, height: 30, borderRadius: 8 }} contentFit="cover" /> : null}
+            <View style={styles.rowGrow}>
+              <Text style={[styles.rowTitle, { color: colors.foreground }]}>{state.storeProfile.storeName || APP_BRAND.name}</Text>
+              <Text style={[styles.rowSubtitle, { color: colors.mutedForeground }]}>{[state.storeProfile.phone, state.storeProfile.city, state.storeProfile.address].filter(Boolean).join(' · ')}</Text>
+            </View>
+          </View>
           {sale.items.map((item) => <View key={item.productId} style={styles.invoiceDetailRow}><Text style={[styles.rowGrow, styles.rowSubtitle, { color: colors.foreground }]}>{item.name}</Text><Text style={[styles.rowSubtitle, { color: colors.mutedForeground }]}>{item.quantity} × {money(item.unitPrice)}</Text><Text style={[styles.rowSubtitle, { color: colors.foreground, fontWeight: '800' }]}>{money(item.total)}</Text></View>)}
           {sale.discount > 0 && <View style={styles.invoiceDetailRow}><Text style={[styles.rowGrow, styles.rowSubtitle, { color: colors.mutedForeground }]}>خصم</Text><Text style={[styles.rowSubtitle, { color: colors.destructive }]}>-{money(sale.discount)}</Text></View>}
           <View style={[styles.invoiceDetailRow, { borderTopWidth: 1, borderTopColor: colors.border, marginTop: 6, paddingTop: 6 }]}><Text style={[styles.rowGrow, styles.rowTitle, { color: colors.foreground }]}>الإجمالي</Text><Text style={[styles.saleAmount, { color: colors.foreground }]}>{money(sale.total)}</Text></View>
@@ -579,7 +647,7 @@ function ReportsScreen({ onNavigate }: { onNavigate: (key: ScreenKey) => void })
   const expenses = state.expenses.reduce((sum, e) => sum + e.amount, 0);
   const purchases = state.purchases.reduce((sum, p) => sum + p.total, 0);
   const profit = sales - costs - expenses;
-  const shareReport = () => Share.share({ message: `تقرير منظومة شهبون\n\nإجمالي المبيعات: ${money(sales)}\nالمحصل: ${money(cashCollected)}\nتكلفة البضاعة: ${money(costs)}\nالمصروفات: ${money(expenses)}\nصافي الربح: ${money(profit)}\nالمشتريات: ${money(purchases)}\nعدد الفواتير: ${state.sales.length}\nالمرتجعات: ${state.returns.length}` }).catch(() => undefined);
+  const shareReport = () => Share.share({ message: `تقرير ${state.storeProfile.storeName || APP_BRAND.name}\n${[state.storeProfile.ownerName, state.storeProfile.phone].filter(Boolean).join(' · ')}\n\nإجمالي المبيعات: ${money(sales)}\nالمحصل: ${money(cashCollected)}\nتكلفة البضاعة: ${money(costs)}\nالمصروفات: ${money(expenses)}\nصافي الربح: ${money(profit)}\nالمشتريات: ${money(purchases)}\nعدد الفواتير: ${state.sales.length}\nالمرتجعات: ${state.returns.length}` }).catch(() => undefined);
   return <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
     <View style={styles.reportHeader}><View><Text style={[styles.reportKicker, { color: colors.mutedForeground }]}>ملخص شامل</Text><Text style={[styles.reportTitle, { color: colors.foreground }]}>أداء المنظومة</Text></View><IconButton name="share-social-outline" accessibilityLabel="مشاركة التقرير" color={colors.accent} onPress={shareReport} /></View>
     <View style={styles.reportGrid}><ReportMetric label="المبيعات" value={money(sales)} icon="trending-up-outline" tone="green" /><ReportMetric label="صافي الربح" value={money(profit)} icon="stats-chart-outline" tone="navy" /><ReportMetric label="المحصل" value={money(cashCollected)} icon="cash-outline" tone="gold" /><ReportMetric label="المشتريات" value={money(purchases)} icon="bag-add-outline" tone="red" /></View>
@@ -614,13 +682,46 @@ function AuditScreen() {
 // ─── Settings ─────────────────────────────────────────────────────────────────
 function SettingsScreen() {
   const colors = useColors();
-  const { state, setTheme, setUsdRate, shareBackupText, logout } = useApp();
+  const { state, setTheme, setUsdRate, shareBackupText, logout, updateStoreProfile } = useApp();
   const [rate, setRate] = useState(String(state.usdRate));
   const [mode, setMode] = useState<ThemeMode>(state.themeMode);
   const [theme, setThemeName] = useState<ThemeName>(state.themeName);
+  const [profile, setProfile] = useState<StoreProfile>(state.storeProfile);
+  const setP = (key: keyof StoreProfile) => (value: string) => setProfile((p) => ({ ...p, [key]: value }));
   const saveRate = () => { const n = Number(rate); if (!n) { Alert.alert('قيمة غير صحيحة', 'أدخل سعر الدولار.'); return; } setUsdRate(n); Alert.alert('تم الحفظ', 'تم تحديث سعر الدولار.'); };
   const backup = () => Share.share({ message: shareBackupText() }).catch(() => undefined);
+  const pickLogo = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.8, allowsEditing: true, aspect: [1, 1] });
+    if (!result.canceled && result.assets[0]) { setProfile((p) => ({ ...p, logoUri: result.assets[0].uri })); updateStoreProfile({ logoUri: result.assets[0].uri }); }
+  };
+  const saveProfile = () => {
+    if (!profile.storeName.trim() || !profile.ownerName.trim() || !profile.phone.trim()) { Alert.alert('بيانات ناقصة', 'اسم النشاط واسم المالك ورقم الهاتف مطلوبة.'); return; }
+    updateStoreProfile(profile);
+    Alert.alert('تم الحفظ', 'تم تحديث بيانات المتجر.');
+  };
   return <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+    <Surface>
+      <SectionTitle title="بيانات المتجر" />
+      <Text style={[styles.fieldCaption, { color: colors.mutedForeground }]}>تظهر في الفواتير والتقارير. اسم البرنامج «{APP_BRAND.name}» ثابت ولا يتأثر بهذه البيانات.</Text>
+      <TextField label="اسم النشاط / المتجر *" value={profile.storeName} onChangeText={setP('storeName')} placeholder="اسم متجرك" />
+      <TextField label="اسم المالك *" value={profile.ownerName} onChangeText={setP('ownerName')} placeholder="الاسم الكامل" />
+      <TextField label="رقم الهاتف *" value={profile.phone} onChangeText={setP('phone')} keyboardType="phone-pad" placeholder="09x xxx xxxx" />
+      <TextField label="رقم واتساب" value={profile.whatsapp} onChangeText={setP('whatsapp')} keyboardType="phone-pad" placeholder="اختياري" />
+      <TextField label="المدينة" value={profile.city} onChangeText={setP('city')} placeholder="المدينة" />
+      <TextField label="العنوان" value={profile.address} onChangeText={setP('address')} placeholder="الشارع / المنطقة" />
+      <TextField label="نوع النشاط" value={profile.activityType} onChangeText={setP('activityType')} placeholder="مثال: قطع غيار" />
+      <TextField label="البريد الإلكتروني" value={profile.email} onChangeText={setP('email')} keyboardType="email-address" autoCapitalize="none" placeholder="اختياري" />
+      <Pressable onPress={pickLogo} style={[styles.settingRow, { borderWidth: 1, borderColor: colors.border, borderRadius: 12, paddingHorizontal: 12 }]}>
+        {profile.logoUri
+          ? <Image source={{ uri: profile.logoUri }} style={{ width: 44, height: 44, borderRadius: 10 }} contentFit="cover" />
+          : <View style={[styles.settingIcon, { backgroundColor: colors.secondary }]}><Ionicons name="image-outline" size={20} color={colors.secondaryForeground} /></View>}
+        <View style={styles.rowGrow}>
+          <Text style={[styles.rowTitle, { color: colors.foreground }]}>شعار المتجر</Text>
+          <Text style={[styles.rowSubtitle, { color: colors.mutedForeground }]}>{profile.logoUri ? 'اضغط للتغيير' : 'اختياري — يظهر في فواتيرك فقط'}</Text>
+        </View>
+      </Pressable>
+      <PrimaryButton title="حفظ بيانات المتجر" icon="save-outline" onPress={saveProfile} />
+    </Surface>
     <Surface>
       <SectionTitle title="المظهر" />
       <Text style={[styles.fieldCaption, { color: colors.mutedForeground }]}>الوضع</Text>
@@ -636,7 +737,7 @@ function SettingsScreen() {
     <Surface>
       <SectionTitle title="البيانات والحماية" />
       <SettingRow icon="cloud-download-outline" title="نسخة احتياطية محلية" detail="مشاركة نسخة JSON من بياناتك" onPress={backup} />
-      <SettingRow icon="information-circle-outline" title="عن المنظومة" detail="الإصدار 1.1.0 — محلي · بدون إنترنت" onPress={() => Alert.alert('منظومة شهبون للمبيعات', 'إصدار 1.1.0\nتطبيق محلي لإدارة المبيعات والمخزون والعملاء والمصروفات والورديات.')} />
+      <SettingRow icon="information-circle-outline" title="عن المنظومة" detail={`الإصدار ${APP_BRAND.version} — محلي · بدون إنترنت`} onPress={() => Alert.alert(APP_BRAND.name, `إصدار ${APP_BRAND.version}\nتطبيق محلي لإدارة المبيعات والمخزون والعملاء والمصروفات والورديات.`)} />
     </Surface>
     <PrimaryButton title="تسجيل الخروج" icon="log-out-outline" variant="danger" onPress={() => Alert.alert('تسجيل الخروج', 'هل تريد إنهاء الجلسة الحالية؟', [{ text: 'إلغاء', style: 'cancel' }, { text: 'خروج', style: 'destructive', onPress: logout }])} />
   </ScrollView>;
