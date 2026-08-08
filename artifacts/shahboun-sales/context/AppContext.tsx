@@ -64,6 +64,10 @@ export interface Sale {
   discount: number;
   total: number;
   paid: number;
+  /** الجزء المدفوع نقدًا فعليًا */
+  cashPaid?: number;
+  /** الجزء المدفوع بالحوالة */
+  transferPaid?: number;
   paymentMethod: PaymentMethod;
   customerId?: string;
   user: string;
@@ -432,7 +436,32 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const cur = stateRef.current;
     const expense: Expense = { ...values, id: uid('expense'), createdAt: new Date().toISOString() };
     const audit = makeAudit('مصروف', `${values.title} — ${values.amount}`, cur);
-    commit({ ...cur, expenses: [expense, ...cur.expenses], audit: [audit, ...cur.audit] }, [expenseRow(expense), auditRow(audit)]);
+
+    const shifts = cur.shifts.map((s) =>
+      s.status === 'open'
+        ? {
+            ...s,
+            expensesTotal: s.expensesTotal + values.amount,
+            cashOut: s.cashOut + values.amount,
+          }
+        : s
+    );
+
+    const openShiftRow = shifts.find((s) => s.status === 'open');
+
+    commit(
+      {
+        ...cur,
+        shifts,
+        expenses: [expense, ...cur.expenses],
+        audit: [audit, ...cur.audit],
+      },
+      [
+        expenseRow(expense),
+        ...(openShiftRow ? [shiftRow(openShiftRow)] : []),
+        auditRow(audit),
+      ]
+    );
   }, [commit, makeAudit]);
 
   const completeSale = useCallback((values: Omit<Sale, 'id' | 'invoiceNumber' | 'createdAt' | 'user'>) => {
@@ -443,7 +472,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const productById = new Map(cur.products.map((p) => [p.id, p]));
       // تثبيت تكلفة كل صنف لحظة البيع
       const items: CartLine[] = values.items.map((item) => ({ ...item, costPrice: productById.get(item.productId)?.purchasePrice ?? 0 }));
-      const sale: Sale = { ...values, items, id: uid('sale'), invoiceNumber: `INV-${seq}`, createdAt: new Date().toISOString(), user: cur.loggedInUser ?? 'admin' };
+      const requestedCash = Math.max(0, values.cashPaid ?? (values.paymentMethod === 'نقدي' ? values.paid : 0));
+      const requestedTransfer = Math.max(0, values.transferPaid ?? (values.paymentMethod === 'حوالة' ? values.paid : 0));
+      const cashPaid = Math.min(values.total, requestedCash);
+      const transferPaid = Math.min(Math.max(0, values.total - cashPaid), requestedTransfer);
+      const paid = cashPaid + transferPaid;
+      const sale: Sale = { ...values, items, paid, cashPaid, transferPaid, id: uid('sale'), invoiceNumber: `INV-${seq}`, createdAt: new Date().toISOString(), user: cur.loggedInUser ?? 'admin' };
       const touched: Product[] = [];
       const products = cur.products.map((p) => {
         const line = items.find((item) => item.productId === p.id);
@@ -452,7 +486,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         touched.push(updated);
         return updated;
       });
-      const debt = Math.max(0, values.total - values.paid);
+      const debt = Math.max(0, sale.total - sale.paid);
       const ledger: LedgerEntry[] = values.customerId && debt > 0
         ? [{ id: uid('ct'), partyId: values.customerId, kind: 'debt', amount: debt, ref: sale.invoiceNumber, createdAt: sale.createdAt, user: sale.user }]
         : [];
@@ -460,7 +494,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         ? cur.customers.map((c) => (c.id === values.customerId ? { ...c, balance: c.balance + debt } : c))
         : cur.customers;
       const touchedCustomer = customers.find((c) => c.id === values.customerId);
-      const shifts = cur.shifts.map((s) => (s.status === 'open' ? { ...s, salesTotal: s.salesTotal + values.total, cashIn: s.cashIn + (values.paymentMethod === 'نقدي' ? values.paid : 0) } : s));
+      const shifts = cur.shifts.map((s) => (s.status === 'open' ? { ...s, salesTotal: s.salesTotal + sale.total, cashIn: s.cashIn + cashPaid } : s));
       const openShiftRow = shifts.find((s) => s.status === 'open');
       const audit = makeAudit('بيع', `${sale.invoiceNumber} — ${sale.total.toFixed(2)} د.ل`, cur);
       const next: AppState = { ...cur, products, customers, shifts, sales: [sale, ...cur.sales], customerTransactions: [...ledger, ...cur.customerTransactions], audit: [audit, ...cur.audit] };
@@ -547,11 +581,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const cur = stateRef.current;
     const customer = cur.customers.find((c) => c.id === customerId);
     if (!customer) return;
-    const updated = { ...customer, balance: Math.max(0, customer.balance - amount) };
-    const entry: LedgerEntry = { id: uid('ct'), partyId: customerId, kind: 'payment', amount, ref: 'تحصيل', createdAt: new Date().toISOString(), user: cur.loggedInUser ?? 'admin' };
-    const shifts = cur.shifts.map((s) => (s.status === 'open' ? { ...s, cashIn: s.cashIn + amount } : s));
+
+    const actualAmount = Math.min(Math.max(0, amount), customer.balance);
+    if (actualAmount <= 0) return;
+
+    const updated = { ...customer, balance: customer.balance - actualAmount };
+    const entry: LedgerEntry = { id: uid('ct'), partyId: customerId, kind: 'payment', amount: actualAmount, ref: 'تحصيل', createdAt: new Date().toISOString(), user: cur.loggedInUser ?? 'admin' };
+    const shifts = cur.shifts.map((s) => (s.status === 'open' ? { ...s, cashIn: s.cashIn + actualAmount } : s));
     const openShiftRow = shifts.find((s) => s.status === 'open');
-    const audit = makeAudit('تحصيل دين', `${customer.name} — ${amount.toFixed(2)} د.ل`, cur);
+    const audit = makeAudit('تحصيل دين', `${customer.name} — ${actualAmount.toFixed(2)} د.ل`, cur);
     const next = { ...cur, customers: cur.customers.map((c) => (c.id === customerId ? updated : c)), shifts, customerTransactions: [entry, ...cur.customerTransactions], audit: [audit, ...cur.audit] };
     commit(next, [customerRow(updated), customerTxRow(entry), ...(openShiftRow ? [shiftRow(openShiftRow)] : []), auditRow(audit)]);
   }, [commit, makeAudit]);
@@ -560,11 +598,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const cur = stateRef.current;
     const supplier = cur.suppliers.find((s) => s.id === supplierId);
     if (!supplier) return;
-    const updated = { ...supplier, balance: Math.max(0, supplier.balance - amount) };
-    const entry: LedgerEntry = { id: uid('st'), partyId: supplierId, kind: 'payment', amount, ref: 'سداد', createdAt: new Date().toISOString(), user: cur.loggedInUser ?? 'admin' };
-    const shifts = cur.shifts.map((s) => (s.status === 'open' ? { ...s, cashOut: s.cashOut + amount } : s));
+
+    const actualAmount = Math.min(Math.max(0, amount), supplier.balance);
+    if (actualAmount <= 0) return;
+
+    const updated = { ...supplier, balance: supplier.balance - actualAmount };
+    const entry: LedgerEntry = { id: uid('st'), partyId: supplierId, kind: 'payment', amount: actualAmount, ref: 'سداد', createdAt: new Date().toISOString(), user: cur.loggedInUser ?? 'admin' };
+    const shifts = cur.shifts.map((s) => (s.status === 'open' ? { ...s, cashOut: s.cashOut + actualAmount } : s));
     const openShiftRow = shifts.find((s) => s.status === 'open');
-    const audit = makeAudit('سداد لمورد', `${supplier.name} — ${amount.toFixed(2)} د.ل`, cur);
+    const audit = makeAudit('سداد لمورد', `${supplier.name} — ${actualAmount.toFixed(2)} د.ل`, cur);
     const next = { ...cur, suppliers: cur.suppliers.map((s) => (s.id === supplierId ? updated : s)), shifts, supplierTransactions: [entry, ...cur.supplierTransactions], audit: [audit, ...cur.audit] };
     commit(next, [supplierRow(updated), supplierTxRow(entry), ...(openShiftRow ? [shiftRow(openShiftRow)] : []), auditRow(audit)]);
   }, [commit, makeAudit]);

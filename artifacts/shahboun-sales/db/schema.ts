@@ -1,5 +1,5 @@
 // مخطط قاعدة بيانات SQLite — المصدر الوحيد للبنية والإصدار
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 export const BACKUP_APP_MARKER = 'shahboun-sales-backup';
 export const DB_NAME = 'shahboun_sales.db';
 
@@ -24,7 +24,10 @@ export const CREATE_TABLES: string[] = [
   `CREATE TABLE IF NOT EXISTS sales (
     id TEXT PRIMARY KEY, invoice_number TEXT NOT NULL UNIQUE, created_at TEXT NOT NULL,
     subtotal REAL NOT NULL, discount REAL NOT NULL DEFAULT 0, total REAL NOT NULL,
-    paid REAL NOT NULL DEFAULT 0, payment_method TEXT NOT NULL, customer_id TEXT, user TEXT,
+    paid REAL NOT NULL DEFAULT 0,
+    cash_paid REAL NOT NULL DEFAULT 0,
+    transfer_paid REAL NOT NULL DEFAULT 0,
+    payment_method TEXT NOT NULL, customer_id TEXT, user TEXT,
     returned INTEGER NOT NULL DEFAULT 0)`,
   `CREATE TABLE IF NOT EXISTS sale_items (
     sale_id TEXT NOT NULL, product_id TEXT NOT NULL, name TEXT NOT NULL,
@@ -82,7 +85,7 @@ export const TABLE_COLUMNS: Record<string, string[]> = {
   customer_transactions: ['id', 'customer_id', 'kind', 'amount', 'ref', 'created_at', 'user'],
   suppliers: ['id', 'name', 'phone', 'address', 'balance'],
   supplier_transactions: ['id', 'supplier_id', 'kind', 'amount', 'ref', 'created_at', 'user'],
-  sales: ['id', 'invoice_number', 'created_at', 'subtotal', 'discount', 'total', 'paid', 'payment_method', 'customer_id', 'user', 'returned'],
+  sales: ['id', 'invoice_number', 'created_at', 'subtotal', 'discount', 'total', 'paid', 'cash_paid', 'transfer_paid', 'payment_method', 'customer_id', 'user', 'returned'],
   sale_items: ['sale_id', 'product_id', 'name', 'quantity', 'unit_price', 'cost_price', 'total'],
   purchases: ['id', 'invoice_number', 'created_at', 'supplier_id', 'supplier_name', 'total', 'paid', 'user'],
   purchase_items: ['purchase_id', 'product_id', 'name', 'quantity', 'unit_cost', 'total'],

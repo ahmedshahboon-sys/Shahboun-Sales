@@ -228,6 +228,8 @@ function PosScreen() {
   const [cameraOpen, setCameraOpen] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('نقدي');
   const [paid, setPaid] = useState('');
+  const [cashPaid, setCashPaid] = useState('');
+  const [transferPaid, setTransferPaid] = useState('');
   const [discount, setDiscount] = useState('');
   const [customerId, setCustomerId] = useState<string | undefined>();
   const categories = ['الكل', ...Array.from(new Set(state.products.map((p) => p.category)))];
@@ -235,6 +237,10 @@ function PosScreen() {
   const subtotal = cart.reduce((sum, item) => sum + item.total, 0);
   const discountValue = Math.min(Number(discount) || 0, subtotal);
   const total = subtotal - discountValue;
+  const mixedCashValue = Math.max(0, Number(cashPaid) || 0);
+  const mixedTransferValue = Math.max(0, Number(transferPaid) || 0);
+  const mixedPaidValue = Math.min(total, mixedCashValue + mixedTransferValue);
+  const mixedRemaining = Math.max(0, total - mixedPaidValue);
 
   const addToCart = (product: Product) => {
     setCart((cur) => {
@@ -251,11 +257,76 @@ function PosScreen() {
     return quantity === 0 ? [] : [{ ...item, quantity, total: quantity * item.unitPrice }];
   }));
   const finishSale = () => {
-    const paidValue = paymentMethod === 'آجل' ? 0 : Number(paid || total);
-    if (paymentMethod !== 'آجل' && paymentMethod !== 'مختلط' && paidValue < total) { Alert.alert('المبلغ غير مكتمل', 'أدخل المبلغ المدفوع أو اختر البيع الآجل.'); return; }
-    if ((paymentMethod === 'آجل' || paymentMethod === 'مختلط') && !customerId) { Alert.alert('اختر العميل', 'يجب اختيار عميل للبيع الآجل أو المختلط.'); return; }
-    completeSale({ items: cart, subtotal, discount: discountValue, total, paid: paidValue, paymentMethod, customerId });
-    setCart([]); setPaymentOpen(false); setPaid(''); setDiscount(''); setCustomerId(undefined);
+    let cashValue = 0;
+    let transferValue = 0;
+    let paidValue = 0;
+
+    if (paymentMethod === 'آجل') {
+      if (!customerId) {
+        Alert.alert('اختر العميل', 'يجب اختيار عميل للبيع الآجل.');
+        return;
+      }
+    } else if (paymentMethod === 'نقدي') {
+      const entered = Math.max(0, Number(paid || total));
+      if (entered < total) {
+        Alert.alert('المبلغ غير مكتمل', 'أدخل كامل المبلغ أو اختر آجل / مختلط.');
+        return;
+      }
+      cashValue = total;
+      paidValue = total;
+    } else if (paymentMethod === 'حوالة') {
+      const entered = Math.max(0, Number(paid || total));
+      if (entered < total) {
+        Alert.alert('المبلغ غير مكتمل', 'أدخل كامل المبلغ أو اختر آجل / مختلط.');
+        return;
+      }
+      transferValue = total;
+      paidValue = total;
+    } else {
+      const enteredCash = Math.max(0, Number(cashPaid) || 0);
+      const enteredTransfer = Math.max(0, Number(transferPaid) || 0);
+      const enteredTotal = enteredCash + enteredTransfer;
+
+      if (enteredTotal <= 0) {
+        Alert.alert('بيانات الدفع ناقصة', 'أدخل المبلغ النقدي أو مبلغ الحوالة.');
+        return;
+      }
+
+      if (enteredTotal > total + 0.001) {
+        Alert.alert('المبلغ أكبر من الفاتورة', 'مجموع النقدي والحوالة لا يمكن أن يتجاوز إجمالي الفاتورة.');
+        return;
+      }
+
+      cashValue = enteredCash;
+      transferValue = enteredTransfer;
+      paidValue = enteredTotal;
+
+      if (paidValue < total && !customerId) {
+        Alert.alert('اختر العميل', 'يوجد مبلغ متبقٍ، لذلك يجب اختيار العميل لتسجيل الدين.');
+        return;
+      }
+    }
+
+    completeSale({
+      items: cart,
+      subtotal,
+      discount: discountValue,
+      total,
+      paid: paidValue,
+      cashPaid: cashValue,
+      transferPaid: transferValue,
+      paymentMethod,
+      customerId,
+    });
+
+    setCart([]);
+    setPaymentOpen(false);
+    setPaid('');
+    setCashPaid('');
+    setTransferPaid('');
+    setDiscount('');
+    setCustomerId(undefined);
+
     Alert.alert('✓ تم حفظ الفاتورة', 'تم تحديث المخزون وتسجيل العملية.');
   };
 
@@ -277,9 +348,22 @@ function PosScreen() {
         <Text style={[styles.modalSummary, { color: colors.mutedForeground }]}>الإجمالي <Text style={[styles.modalSummaryStrong, { color: colors.foreground }]}>{money(total)}</Text></Text>
         <TextField label="خصم (اختياري)" value={discount} onChangeText={setDiscount} keyboardType="decimal-pad" placeholder="0.00" />
         <Text style={[styles.fieldCaption, { color: colors.mutedForeground }]}>طريقة الدفع</Text>
-        <View style={styles.paymentOptions}>{(['نقدي', 'حوالة', 'آجل', 'مختلط'] as PaymentMethod[]).map((method) => <Pressable key={method} onPress={() => setPaymentMethod(method)} style={[styles.paymentOption, { borderColor: paymentMethod === method ? colors.accent : colors.border, backgroundColor: paymentMethod === method ? colors.secondary : colors.card }]}><Ionicons name={method === 'نقدي' ? 'cash-outline' : method === 'حوالة' ? 'swap-horizontal-outline' : method === 'آجل' ? 'time-outline' : 'layers-outline'} size={19} color={paymentMethod === method ? colors.secondaryForeground : colors.mutedForeground} /><Text style={[styles.paymentText, { color: paymentMethod === method ? colors.secondaryForeground : colors.foreground }]}>{method}</Text></Pressable>)}</View>
-        {(paymentMethod === 'آجل' || paymentMethod === 'مختلط') && <><Text style={[styles.fieldCaption, { color: colors.mutedForeground }]}>العميل *</Text><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>{state.customers.map((c) => <Pressable key={c.id} onPress={() => setCustomerId(c.id)} style={[styles.chip, { backgroundColor: customerId === c.id ? colors.secondary : colors.card, borderColor: customerId === c.id ? colors.accent : colors.border }]}><Text style={[styles.chipText, { color: customerId === c.id ? colors.secondaryForeground : colors.mutedForeground }]}>{c.name}</Text></Pressable>)}</ScrollView></>}
-        {paymentMethod !== 'آجل' && <TextField label="المبلغ المدفوع" value={paid} onChangeText={setPaid} keyboardType="decimal-pad" placeholder={total.toFixed(2)} />}
+        <View style={styles.paymentOptions}>{(['نقدي', 'حوالة', 'آجل', 'مختلط'] as PaymentMethod[]).map((method) => <Pressable key={method} onPress={() => { setPaymentMethod(method); setPaid(''); setCashPaid(''); setTransferPaid(''); }} style={[styles.paymentOption, { borderColor: paymentMethod === method ? colors.accent : colors.border, backgroundColor: paymentMethod === method ? colors.secondary : colors.card }]}><Ionicons name={method === 'نقدي' ? 'cash-outline' : method === 'حوالة' ? 'swap-horizontal-outline' : method === 'آجل' ? 'time-outline' : 'layers-outline'} size={19} color={paymentMethod === method ? colors.secondaryForeground : colors.mutedForeground} /><Text style={[styles.paymentText, { color: paymentMethod === method ? colors.secondaryForeground : colors.foreground }]}>{method}</Text></Pressable>)}</View>
+        {(paymentMethod === 'آجل' || (paymentMethod === 'مختلط' && mixedRemaining > 0)) && <><Text style={[styles.fieldCaption, { color: colors.mutedForeground }]}>العميل *</Text><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>{state.customers.map((c) => <Pressable key={c.id} onPress={() => setCustomerId(c.id)} style={[styles.chip, { backgroundColor: customerId === c.id ? colors.secondary : colors.card, borderColor: customerId === c.id ? colors.accent : colors.border }]}><Text style={[styles.chipText, { color: customerId === c.id ? colors.secondaryForeground : colors.mutedForeground }]}>{c.name}</Text></Pressable>)}</ScrollView></>}
+        {(paymentMethod === 'نقدي' || paymentMethod === 'حوالة') && <TextField label="المبلغ المدفوع" value={paid} onChangeText={setPaid} keyboardType="decimal-pad" placeholder={total.toFixed(2)} />}
+        {paymentMethod === 'مختلط' && <>
+          <View style={styles.formRow}>
+            <View style={styles.formHalf}>
+              <TextField label="نقدي" value={cashPaid} onChangeText={setCashPaid} keyboardType="decimal-pad" placeholder="0.00" />
+            </View>
+            <View style={styles.formHalf}>
+              <TextField label="حوالة" value={transferPaid} onChangeText={setTransferPaid} keyboardType="decimal-pad" placeholder="0.00" />
+            </View>
+          </View>
+          <Text style={[styles.creditHint, { color: mixedRemaining > 0 ? colors.warning : colors.success }]}>
+            المدفوع: {money(mixedPaidValue)} — المتبقي: {money(mixedRemaining)}
+          </Text>
+        </>}
         {paymentMethod === 'آجل' && <Text style={[styles.creditHint, { color: colors.warning }]}>سيتم تسجيل المبلغ كدين على العميل المختار.</Text>}
         <PrimaryButton title="تأكيد وحفظ الفاتورة" icon="checkmark-circle-outline" variant="success" onPress={finishSale} />
       </KeyboardAvoidingView></View>
@@ -552,6 +636,10 @@ function InvoicesScreen() {
           {sale.discount > 0 && <View style={styles.invoiceDetailRow}><Text style={[styles.rowGrow, styles.rowSubtitle, { color: colors.mutedForeground }]}>خصم</Text><Text style={[styles.rowSubtitle, { color: colors.destructive }]}>-{money(sale.discount)}</Text></View>}
           <View style={[styles.invoiceDetailRow, { borderTopWidth: 1, borderTopColor: colors.border, marginTop: 6, paddingTop: 6 }]}><Text style={[styles.rowGrow, styles.rowTitle, { color: colors.foreground }]}>الإجمالي</Text><Text style={[styles.saleAmount, { color: colors.foreground }]}>{money(sale.total)}</Text></View>
           <View style={styles.invoiceDetailRow}><Text style={[styles.rowGrow, styles.rowSubtitle, { color: colors.mutedForeground }]}>المدفوع</Text><Text style={[styles.rowSubtitle, { color: colors.success }]}>{money(sale.paid)}</Text></View>
+          {sale.paymentMethod === 'مختلط' && <>
+            <View style={styles.invoiceDetailRow}><Text style={[styles.rowGrow, styles.rowSubtitle, { color: colors.mutedForeground }]}>نقدي</Text><Text style={[styles.rowSubtitle, { color: colors.foreground }]}>{money(sale.cashPaid ?? 0)}</Text></View>
+            <View style={styles.invoiceDetailRow}><Text style={[styles.rowGrow, styles.rowSubtitle, { color: colors.mutedForeground }]}>حوالة</Text><Text style={[styles.rowSubtitle, { color: colors.foreground }]}>{money(sale.transferPaid ?? 0)}</Text></View>
+          </>}
           {sale.total - sale.paid > 0 && <View style={styles.invoiceDetailRow}><Text style={[styles.rowGrow, styles.rowSubtitle, { color: colors.mutedForeground }]}>المتبقي (دين)</Text><Text style={[styles.rowSubtitle, { color: colors.warning }]}>{money(sale.total - sale.paid)}</Text></View>}
           <Pressable
             onPress={() => printInvoice(sale, state.storeProfile, customer)}

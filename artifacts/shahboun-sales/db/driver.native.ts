@@ -28,8 +28,26 @@ class SqliteDriver implements DbDriver {
     await db.execAsync('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
     await db.withExclusiveTransactionAsync(async (tx) => {
       for (const ddl of CREATE_TABLES) await tx.execAsync(ddl);
-      await tx.runAsync(`INSERT OR IGNORE INTO settings (key, value) VALUES ('schema_version', ?)`, [String(SCHEMA_VERSION)]);
     });
+    const saleCols = await db.getAllAsync<{ name: string }>('PRAGMA table_info(sales)');
+    const saleColNames = new Set(saleCols.map((c) => c.name));
+
+    if (!saleColNames.has('cash_paid')) {
+      await db.execAsync('ALTER TABLE sales ADD COLUMN cash_paid REAL NOT NULL DEFAULT 0');
+    }
+    if (!saleColNames.has('transfer_paid')) {
+      await db.execAsync('ALTER TABLE sales ADD COLUMN transfer_paid REAL NOT NULL DEFAULT 0');
+    }
+
+    // ترحيل الفواتير القديمة التي كانت تحفظ المبلغ في paid فقط
+    await db.runAsync("UPDATE sales SET cash_paid = paid WHERE payment_method = 'نقدي' AND cash_paid = 0 AND transfer_paid = 0");
+    await db.runAsync("UPDATE sales SET transfer_paid = paid WHERE payment_method = 'حوالة' AND cash_paid = 0 AND transfer_paid = 0");
+
+    await db.runAsync(
+      `INSERT OR REPLACE INTO settings (key, value) VALUES ('schema_version', ?)`,
+      [String(SCHEMA_VERSION)]
+    );
+
     this.db = db;
   }
 
