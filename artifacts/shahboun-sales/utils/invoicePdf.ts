@@ -1,7 +1,7 @@
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { Alert, Platform } from 'react-native';
-import type { Sale, Customer } from '@/context/AppContext';
+import type { Sale, Customer, StoreProfile } from '@/context/AppContext';
 
 const money = (v: number) => `${v.toFixed(2)} د.ل`;
 
@@ -18,9 +18,12 @@ function buildQrSvg(text: string): string {
 
 export function buildInvoiceHtml(
   sale: Sale,
-  businessName: string,
+  store: StoreProfile,
   customer: Customer | undefined
 ): string {
+  const businessName = store.storeName || 'فاتورة مبيعات';
+  const contactLine = [store.phone, store.whatsapp && store.whatsapp !== store.phone ? `واتساب: ${store.whatsapp}` : '', [store.city, store.address].filter(Boolean).join(' - ')].filter(Boolean).join(' · ');
+  const logoImg = store.logoUri ? `<img src="${store.logoUri}" style="width:52px;height:52px;border-radius:10px;object-fit:cover;margin-left:10px;" />` : '';
   const dateFormatted = new Intl.DateTimeFormat('ar', {
     day: 'numeric',
     month: 'long',
@@ -227,9 +230,12 @@ export function buildInvoiceHtml(
 <div class="page">
   <!-- Header -->
   <div class="header">
-    <div class="header-brand">
-      <h1>${businessName}</h1>
-      <p>نظام إدارة المبيعات والمخزون</p>
+    <div class="header-brand" style="display:flex;align-items:center;">
+      ${logoImg}
+      <div>
+        <h1>${businessName}</h1>
+        <p>${contactLine || store.activityType || 'نظام إدارة المبيعات والمخزون'}</p>
+      </div>
     </div>
     <div class="header-invoice">
       <div class="invoice-label">رقم الفاتورة</div>
@@ -334,11 +340,11 @@ export function buildInvoiceHtml(
 
 export async function printInvoice(
   sale: Sale,
-  businessName: string,
+  store: StoreProfile,
   customer: Customer | undefined
 ): Promise<void> {
   try {
-    const html = buildInvoiceHtml(sale, businessName, customer);
+    const html = buildInvoiceHtml(sale, store, customer);
     if (Platform.OS === 'web') {
       // On web, open print dialog via a blob URL
       const blob = new Blob([html], { type: 'text/html' });

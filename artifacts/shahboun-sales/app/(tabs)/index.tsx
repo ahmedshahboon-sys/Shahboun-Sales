@@ -554,7 +554,7 @@ function InvoicesScreen() {
           <View style={styles.invoiceDetailRow}><Text style={[styles.rowGrow, styles.rowSubtitle, { color: colors.mutedForeground }]}>المدفوع</Text><Text style={[styles.rowSubtitle, { color: colors.success }]}>{money(sale.paid)}</Text></View>
           {sale.total - sale.paid > 0 && <View style={styles.invoiceDetailRow}><Text style={[styles.rowGrow, styles.rowSubtitle, { color: colors.mutedForeground }]}>المتبقي (دين)</Text><Text style={[styles.rowSubtitle, { color: colors.warning }]}>{money(sale.total - sale.paid)}</Text></View>}
           <Pressable
-            onPress={() => printInvoice(sale, state.businessName, customer)}
+            onPress={() => printInvoice(sale, state.storeProfile, customer)}
             style={({ pressed }) => [styles.printBtn, { backgroundColor: colors.accent, opacity: pressed ? 0.8 : 1 }]}
           >
             <Ionicons name="print-outline" size={16} color={colors.accentForeground} />
