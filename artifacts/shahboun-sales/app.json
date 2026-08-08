@@ -1,0 +1,38 @@
+{
+  "expo": {
+    "name": "منظومة شهبون للمبيعات",
+    "slug": "shahboun-sales",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/shahboun-icon.png",
+    "scheme": "shahboun-sales",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/images/shahboun-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#F3F7FB"
+    },
+    "ios": {
+      "supportsTablet": false
+    },
+    "android": {},
+    "web": {
+      "favicon": "./assets/images/icon.png"
+    },
+    "plugins": [
+      [
+        "expo-router",
+        {
+          "origin": "https://replit.com/"
+        }
+      ],
+      "expo-font",
+      "expo-web-browser"
+    ],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    }
+  }
+}

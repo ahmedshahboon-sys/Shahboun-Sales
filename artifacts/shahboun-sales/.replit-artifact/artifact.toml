@@ -1,0 +1,24 @@
+kind = "mobile"
+previewPath = "/"
+title = "منظومة شهبون للمبيعات"
+description = "تطبيق Android عربي احترافي لإدارة المبيعات ونقطة البيع والمخزون والعملاء والموردين والديون والمصروفات والتقارير، يعمل محليًا مع SQLite ومهيأ للمزامنة المستقبلية وبناء APK سحابي."
+version = "1.0.0"
+id = "artifacts/shahboun-sales"
+router = "expo-domain"
+
+[[services]]
+name = "expo"
+ensurePreviewReachable = "/status"
+paths = [ "/" ]
+localPort = 18344
+
+[services.development]
+run = "pnpm --filter @workspace/shahboun-sales run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/shahboun-sales", "run", "build" ]
+run = [ "pnpm", "--filter", "@workspace/shahboun-sales", "run", "serve" ]
+
+[services.env]
+PORT = "18344"
+BASE_PATH = "/"
