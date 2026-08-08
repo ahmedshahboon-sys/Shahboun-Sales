@@ -10,6 +10,7 @@ import { CartLine, Customer, PaymentMethod, Product, PurchaseLine, SaleReturn, S
 import { APP_BRAND } from '@/constants/appInfo';
 import { useColors } from '@/hooks/useColors';
 import { EmptyState, IconButton, LoadingState, Pill, PrimaryButton, SectionTitle, StatCard, Surface, TextField } from '@/components/ShahbounUi';
+import { printInvoice } from '@/utils/invoicePdf';
 
 type ScreenKey = 'dashboard' | 'pos' | 'products' | 'inventory' | 'customers' | 'suppliers' | 'expenses' | 'reports' | 'settings' | 'users' | 'shifts' | 'purchases' | 'invoices' | 'returns' | 'audit';
 
@@ -552,6 +553,13 @@ function InvoicesScreen() {
           <View style={[styles.invoiceDetailRow, { borderTopWidth: 1, borderTopColor: colors.border, marginTop: 6, paddingTop: 6 }]}><Text style={[styles.rowGrow, styles.rowTitle, { color: colors.foreground }]}>الإجمالي</Text><Text style={[styles.saleAmount, { color: colors.foreground }]}>{money(sale.total)}</Text></View>
           <View style={styles.invoiceDetailRow}><Text style={[styles.rowGrow, styles.rowSubtitle, { color: colors.mutedForeground }]}>المدفوع</Text><Text style={[styles.rowSubtitle, { color: colors.success }]}>{money(sale.paid)}</Text></View>
           {sale.total - sale.paid > 0 && <View style={styles.invoiceDetailRow}><Text style={[styles.rowGrow, styles.rowSubtitle, { color: colors.mutedForeground }]}>المتبقي (دين)</Text><Text style={[styles.rowSubtitle, { color: colors.warning }]}>{money(sale.total - sale.paid)}</Text></View>}
+          <Pressable
+            onPress={() => printInvoice(sale, state.businessName, customer)}
+            style={({ pressed }) => [styles.printBtn, { backgroundColor: colors.accent, opacity: pressed ? 0.8 : 1 }]}
+          >
+            <Ionicons name="print-outline" size={16} color={colors.accentForeground} />
+            <Text style={[styles.printBtnText, { color: colors.accentForeground }]}>طباعة / مشاركة PDF</Text>
+          </Pressable>
         </View>}
       </Surface>;
     })}
@@ -912,6 +920,8 @@ const styles = StyleSheet.create({
   totalLine: { fontSize: 16, fontWeight: '900', textAlign: 'right' },
   invoiceDetails: { borderTopWidth: 1, paddingTop: 10, gap: 6 },
   invoiceDetailRow: { flexDirection: 'row-reverse', alignItems: 'center', gap: 8 },
+  printBtn: { flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'center', gap: 7, borderRadius: 10, paddingVertical: 9, paddingHorizontal: 16, marginTop: 6 },
+  printBtnText: { fontSize: 13, fontWeight: '700' },
   qtyInput: { borderWidth: 1, borderRadius: 12, height: 42, fontSize: 16, fontWeight: '800' },
   shiftActiveBanner: { borderRadius: 17, borderWidth: 1, padding: 14 },
   shiftHero: { alignItems: 'center', gap: 11, paddingVertical: 27 },
