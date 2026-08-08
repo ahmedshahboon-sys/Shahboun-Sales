@@ -690,14 +690,37 @@ function AuditScreen() {
 // ─── Settings ─────────────────────────────────────────────────────────────────
 function SettingsScreen() {
   const colors = useColors();
-  const { state, setTheme, setUsdRate, shareBackupText, logout, updateStoreProfile } = useApp();
+  const { state, setTheme, setUsdRate, logout, updateStoreProfile, createBackup, restoreBackup } = useApp();
+  const [busy, setBusy] = useState(false);
   const [rate, setRate] = useState(String(state.usdRate));
   const [mode, setMode] = useState<ThemeMode>(state.themeMode);
   const [theme, setThemeName] = useState<ThemeName>(state.themeName);
   const [profile, setProfile] = useState<StoreProfile>(state.storeProfile);
   const setP = (key: keyof StoreProfile) => (value: string) => setProfile((p) => ({ ...p, [key]: value }));
   const saveRate = () => { const n = Number(rate); if (!n) { Alert.alert('قيمة غير صحيحة', 'أدخل سعر الدولار.'); return; } setUsdRate(n); Alert.alert('تم الحفظ', 'تم تحديث سعر الدولار.'); };
-  const backup = () => Share.share({ message: shareBackupText() }).catch(() => undefined);
+  const backup = async () => {
+    if (busy) return;
+    setBusy(true);
+    const result = await createBackup();
+    setBusy(false);
+    Alert.alert(result.ok ? 'نسخة احتياطية' : 'خطأ', result.message);
+  };
+  const restore = () => {
+    Alert.alert('استعادة نسخة احتياطية', 'سيتم استبدال كل البيانات الحالية بمحتوى النسخة (تُحفظ نسخة أمان تلقائية أولًا). هل تريد المتابعة؟', [
+      { text: 'إلغاء', style: 'cancel' },
+      {
+        text: 'متابعة', style: 'destructive', onPress: () => {
+          void (async () => {
+            if (busy) return;
+            setBusy(true);
+            const result = await restoreBackup();
+            setBusy(false);
+            Alert.alert(result.ok ? 'تمت الاستعادة' : 'تعذّرت الاستعادة', result.message);
+          })();
+        },
+      },
+    ]);
+  };
   const pickLogo = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.8, allowsEditing: true, aspect: [1, 1] });
     if (!result.canceled && result.assets[0]) { setProfile((p) => ({ ...p, logoUri: result.assets[0].uri })); updateStoreProfile({ logoUri: result.assets[0].uri }); }
@@ -744,7 +767,8 @@ function SettingsScreen() {
     </Surface>
     <Surface>
       <SectionTitle title="البيانات والحماية" />
-      <SettingRow icon="cloud-download-outline" title="نسخة احتياطية محلية" detail="مشاركة نسخة JSON من بياناتك" onPress={backup} />
+      <SettingRow icon="cloud-download-outline" title="إنشاء نسخة احتياطية" detail="ملف كامل يشمل كل البيانات وقاعدة SQLite" onPress={() => { void backup(); }} />
+      <SettingRow icon="cloud-upload-outline" title="استعادة نسخة احتياطية" detail="فحص الملف واستبدال البيانات مع نسخة أمان تلقائية" onPress={restore} />
       <SettingRow icon="information-circle-outline" title="عن المنظومة" detail={`الإصدار ${APP_BRAND.version} — محلي · بدون إنترنت`} onPress={() => Alert.alert(APP_BRAND.name, `إصدار ${APP_BRAND.version}\nتطبيق محلي لإدارة المبيعات والمخزون والعملاء والمصروفات والورديات.`)} />
     </Surface>
     <PrimaryButton title="تسجيل الخروج" icon="log-out-outline" variant="danger" onPress={() => Alert.alert('تسجيل الخروج', 'هل تريد إنهاء الجلسة الحالية؟', [{ text: 'إلغاء', style: 'cancel' }, { text: 'خروج', style: 'destructive', onPress: logout }])} />

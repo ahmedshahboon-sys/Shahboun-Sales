@@ -1,5 +1,12 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import React, { ReactNode, createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import React, { ReactNode, createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { db } from '@/db';
+import { createBackupFile, restoreFromPickedFile } from '@/db/backup';
+import { UpsertOp } from '@/db/schema';
+import {
+  auditRow, categoryRow, customerRow, customerTxRow, expenseRow, productRow, purchaseOps,
+  returnOps, saleOps, settingRow, shiftRow, stateSettingsOps, storeProfileRow, supplierRow, supplierTxRow, userRow,
+} from '@/db/mapping';
 
 export type PaymentMethod = 'نقدي' | 'حوالة' | 'آجل' | 'مختلط';
 export type ThemeMode = 'system' | 'light' | 'dark';
@@ -43,6 +50,8 @@ export interface CartLine {
   name: string;
   quantity: number;
   unitPrice: number;
+  /** تكلفة المنتج المثبتة لحظة البيع — لا تتأثر بتغير سعر الشراء لاحقًا */
+  costPrice?: number;
   total: number;
 }
 
@@ -133,6 +142,17 @@ export interface AuditEntry {
   user: string;
 }
 
+/** حركة في كشف حساب عميل أو مورد */
+export interface LedgerEntry {
+  id: string;
+  partyId: string;
+  kind: 'debt' | 'payment';
+  amount: number;
+  ref: string;
+  createdAt: string;
+  user: string;
+}
+
 export interface StoreProfile {
   storeName: string;
   ownerName: string;
@@ -163,6 +183,8 @@ export interface AppState {
   products: Product[];
   customers: Customer[];
   suppliers: Supplier[];
+  customerTransactions: LedgerEntry[];
+  supplierTransactions: LedgerEntry[];
   sales: Sale[];
   purchases: Purchase[];
   returns: SaleReturn[];
@@ -195,11 +217,15 @@ interface AppContextValue {
   setUsdRate: (rate: number) => void;
   completeSetup: (profile: StoreProfile) => void;
   updateStoreProfile: (values: Partial<StoreProfile>) => void;
-  shareBackupText: () => string;
+  /** إنشاء ملف نسخة احتياطية فعلي ومشاركته */
+  createBackup: () => Promise<{ ok: boolean; message: string }>;
+  /** اختيار ملف نسخة واستعادته (مع فحص ونسخة أمان تلقائية) */
+  restoreBackup: () => Promise<{ ok: boolean; message: string }>;
 }
 
-const STORAGE_KEY = '@shahboun_sales_state_v3';
-const LEGACY_STORAGE_KEY = '@shahboun_sales_state_v2';
+// مفاتيح AsyncStorage القديمة — تُقرأ مرة واحدة للترحيل إلى SQLite ثم تُؤرشف
+const LEGACY_KEYS = ['@shahboun_sales_state_v3', '@shahboun_sales_state_v2'];
+const MIGRATION_META = 'asyncstorage_migration';
 
 const hashPassword = (password: string) => {
   let hash = 2166136261;
@@ -212,9 +238,12 @@ const hashPassword = (password: string) => {
 
 const uid = (prefix: string) => `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
+// بذور العدّادات — تحافظ على صيَغ الأرقام الحالية INV-1001 / PUR-101 / RET-11
+const COUNTER_SEEDS = { sale: 1000, purchase: 100, return: 10 } as const;
+
 // النسخة التجارية تبدأ فارغة تمامًا — لا بيانات تجريبية. المستخدم الافتراضي admin فقط.
-const initialState = (): AppState => ({
-  version: 3,
+export const initialState = (): AppState => ({
+  version: 4,
   passwordHash: hashPassword('admin'),
   mustChangePassword: true,
   loggedInUser: null,
@@ -224,6 +253,8 @@ const initialState = (): AppState => ({
   products: [],
   customers: [],
   suppliers: [],
+  customerTransactions: [],
+  supplierTransactions: [],
   sales: [],
   purchases: [],
   returns: [],
@@ -234,189 +265,387 @@ const initialState = (): AppState => ({
   themeName: 'classic',
 });
 
+/** استخراج أكبر رقم من أرقام فواتير مثل INV-1048 */
+const maxNumber = (values: string[], fallback: number) =>
+  values.reduce((max, v) => {
+    const n = Number((v.match(/(\d+)\s*$/) ?? [])[1]);
+    return Number.isFinite(n) && n > max ? n : max;
+  }, fallback);
+
+/** ترحيل بيانات AsyncStorage القديمة إلى قاعدة SQLite — مرة واحدة فقط، دون فقدان بيانات */
+async function migrateFromAsyncStorage(): Promise<void> {
+  const done = await db.getMeta(MIGRATION_META);
+  if (done === 'done') return;
+
+  let legacyRaw: string | null = null;
+  let legacyKey: string | null = null;
+  for (const key of LEGACY_KEYS) {
+    legacyRaw = await AsyncStorage.getItem(key);
+    if (legacyRaw) { legacyKey = key; break; }
+  }
+
+  if (legacyRaw) {
+    try {
+      const parsed = JSON.parse(legacyRaw) as Partial<AppState> & { businessName?: string };
+      delete parsed.businessName;
+      const migrated: AppState = {
+        ...initialState(),
+        ...parsed,
+        version: 4,
+        customerTransactions: parsed.customerTransactions ?? [],
+        supplierTransactions: parsed.supplierTransactions ?? [],
+        storeProfile: { ...emptyStoreProfile(), ...(parsed.storeProfile ?? {}) },
+        setupComplete: parsed.setupComplete ?? false,
+      };
+      const counters: Record<string, number> = {
+        sale: maxNumber(migrated.sales.map((s) => s.invoiceNumber), COUNTER_SEEDS.sale),
+        purchase: maxNumber(migrated.purchases.map((p) => p.invoiceNumber), COUNTER_SEEDS.purchase),
+        return: maxNumber(migrated.returns.map((r) => r.returnNumber), COUNTER_SEEDS.return),
+      };
+      await db.replaceAll({ state: migrated, counters });
+
+      // تحقق من نجاح النقل قبل لمس البيانات القديمة
+      const check = await db.loadState();
+      const okay = !!check
+        && check.sales.length === migrated.sales.length
+        && check.products.length === migrated.products.length
+        && check.customers.length === migrated.customers.length;
+      if (!okay) throw new Error('migration verification failed');
+
+      // أرشفة البيانات القديمة بأمان (لا حذف قبل التأكد)
+      await AsyncStorage.setItem(`${legacyKey}_migrated_archive`, legacyRaw);
+      for (const key of LEGACY_KEYS) await AsyncStorage.removeItem(key);
+    } catch (error) {
+      // نُبقي بيانات AsyncStorage كما هي ولا نعلّم الترحيل كمكتمل
+      console.error('AsyncStorage → SQLite migration failed:', error);
+      return;
+    }
+  }
+  await db.setMeta(MIGRATION_META, 'done');
+}
+
 const AppContext = createContext<AppContextValue | null>(null);
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AppState>(initialState);
   const [loading, setLoading] = useState(true);
+  // مرجع الحالة الحالية — كل عملية تُحسب منه وتُحفظ في القاعدة قبل أي عملية تالية
+  const stateRef = useRef<AppState>(state);
 
   useEffect(() => {
     (async () => {
       try {
-        const value = await AsyncStorage.getItem(STORAGE_KEY);
-        if (value) {
-          const parsed = JSON.parse(value) as Partial<AppState> & { businessName?: string };
-          delete parsed.businessName; // اسم البرنامج ثابت — لم يعد جزءًا من الحالة
-          setState({ ...initialState(), ...parsed, storeProfile: { ...emptyStoreProfile(), ...(parsed.storeProfile ?? {}) } });
-          return;
+        await db.init();
+        await migrateFromAsyncStorage();
+        const loaded = await db.loadState();
+        if (loaded) {
+          stateRef.current = loaded;
+          setState(loaded);
+        } else {
+          // قاعدة جديدة تمامًا — نكتب الحالة الابتدائية (admin + الإعدادات)
+          const fresh = initialState();
+          await db.replaceAll({ state: fresh, counters: { ...COUNTER_SEEDS } });
+          stateRef.current = fresh;
+          setState(fresh);
         }
-        // ترحيل من الإصدار السابق (v2): نحافظ على بيانات المستخدم، ويظهر الإعداد الأولي مرة واحدة
-        const legacy = await AsyncStorage.getItem(LEGACY_STORAGE_KEY);
-        if (legacy) {
-          const parsed = JSON.parse(legacy) as Partial<AppState> & { businessName?: string };
-          delete parsed.businessName;
-          const migrated: AppState = { ...initialState(), ...parsed, storeProfile: emptyStoreProfile(), setupComplete: false, version: 3 };
-          // كتابة فورية لمفتاح v3 حتى لا يتكرر الترحيل إذا انقطع التطبيق قبل أول حفظ عادي
-          await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
-          setState(migrated);
-        }
-      } catch {
-        setState(initialState());
+      } catch (error) {
+        console.error('Database initialization failed:', error);
       } finally {
         setLoading(false);
       }
     })();
   }, []);
 
-  useEffect(() => {
-    if (!loading) AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(state)).catch(() => undefined);
-  }, [state, loading]);
+  /** تنفيذ عملية: تحديث الحالة + حفظ صفوفها في القاعدة (معاملة واحدة، كتابات متسلسلة) */
+  const commit = useCallback((next: AppState, ops: UpsertOp[]) => {
+    stateRef.current = next;
+    setState(next);
+    db.persist(ops, next).catch((error) => console.error('DB persist failed:', error));
+  }, []);
 
-  const addAudit = useCallback((action: string, detail: string, current: AppState): AuditEntry => ({
-    id: uid('audit'),
-    action,
-    detail,
-    createdAt: new Date().toISOString(),
-    user: current.loggedInUser ?? 'admin',
+  const makeAudit = useCallback((action: string, detail: string, cur: AppState): AuditEntry => ({
+    id: uid('audit'), action, detail, createdAt: new Date().toISOString(), user: cur.loggedInUser ?? 'admin',
   }), []);
 
   const login = useCallback(async (username: string, password: string) => {
+    const cur = stateRef.current;
     if (username.trim().toLowerCase() !== 'admin') return { ok: false, message: 'اسم المستخدم غير صحيح.' };
-    if (hashPassword(password) !== state.passwordHash) return { ok: false, message: 'كلمة المرور غير صحيحة.' };
-    setState((cur) => ({ ...cur, loggedInUser: 'admin', audit: [addAudit('تسجيل دخول', 'دخول ناجح إلى التطبيق', cur), ...cur.audit] }));
-    return { ok: true, message: state.mustChangePassword ? 'يجب تغيير كلمة المرور.' : 'تم تسجيل الدخول.' };
-  }, [addAudit, state.mustChangePassword, state.passwordHash]);
+    if (hashPassword(password) !== cur.passwordHash) return { ok: false, message: 'كلمة المرور غير صحيحة.' };
+    const audit = makeAudit('تسجيل دخول', 'دخول ناجح إلى التطبيق', cur);
+    const next = { ...cur, loggedInUser: 'admin', audit: [audit, ...cur.audit] };
+    commit(next, [auditRow(audit), settingRow('logged_in_user', 'admin')]);
+    return { ok: true, message: cur.mustChangePassword ? 'يجب تغيير كلمة المرور.' : 'تم تسجيل الدخول.' };
+  }, [commit, makeAudit]);
 
   const changePassword = useCallback(async (password: string) => {
     if (password.length < 6) return { ok: false, message: 'كلمة المرور يجب ألا تقل عن 6 أحرف.' };
-    setState((cur) => ({ ...cur, passwordHash: hashPassword(password), mustChangePassword: false, audit: [addAudit('تغيير كلمة المرور', 'تم تحديث كلمة مرور المدير', cur), ...cur.audit] }));
+    const cur = stateRef.current;
+    const audit = makeAudit('تغيير كلمة المرور', 'تم تحديث كلمة مرور المدير', cur);
+    const passwordHash = hashPassword(password);
+    const next = { ...cur, passwordHash, mustChangePassword: false, audit: [audit, ...cur.audit] };
+    commit(next, [userRow('admin', passwordHash, false), auditRow(audit)]);
     return { ok: true, message: 'تم تحديث كلمة المرور.' };
-  }, [addAudit]);
+  }, [commit, makeAudit]);
 
-  const logout = useCallback(() => setState((cur) => ({ ...cur, loggedInUser: null })), []);
+  const logout = useCallback(() => {
+    const cur = stateRef.current;
+    commit({ ...cur, loggedInUser: null }, [settingRow('logged_in_user', '')]);
+  }, [commit]);
 
   const addProduct = useCallback((values: Omit<Product, 'id' | 'active'>) => {
-    setState((cur) => ({ ...cur, products: [{ ...values, id: uid('product'), active: true }, ...cur.products], audit: [addAudit('إضافة منتج', values.name, cur), ...cur.audit] }));
-  }, [addAudit]);
+    const cur = stateRef.current;
+    const product: Product = { ...values, id: uid('product'), active: true };
+    const audit = makeAudit('إضافة منتج', values.name, cur);
+    const next = { ...cur, products: [product, ...cur.products], audit: [audit, ...cur.audit] };
+    const ops = [productRow(product), auditRow(audit)];
+    if (product.category) ops.push(categoryRow(product.category));
+    commit(next, ops);
+  }, [commit, makeAudit]);
 
   const updateProduct = useCallback((productId: string, values: Partial<Product>) => {
-    setState((cur) => ({ ...cur, products: cur.products.map((p) => p.id === productId ? { ...p, ...values } : p), audit: [addAudit('تعديل منتج', productId, cur), ...cur.audit] }));
-  }, [addAudit]);
+    const cur = stateRef.current;
+    const updated = cur.products.find((p) => p.id === productId);
+    if (!updated) return;
+    const product = { ...updated, ...values };
+    const audit = makeAudit('تعديل منتج', product.name, cur);
+    const next = { ...cur, products: cur.products.map((p) => (p.id === productId ? product : p)), audit: [audit, ...cur.audit] };
+    const ops = [productRow(product), auditRow(audit)];
+    if (product.category) ops.push(categoryRow(product.category));
+    commit(next, ops);
+  }, [commit, makeAudit]);
 
   const addCustomer = useCallback((values: Omit<Customer, 'id' | 'balance'>) => {
-    setState((cur) => ({ ...cur, customers: [{ ...values, id: uid('customer'), balance: 0 }, ...cur.customers], audit: [addAudit('إضافة عميل', values.name, cur), ...cur.audit] }));
-  }, [addAudit]);
+    const cur = stateRef.current;
+    const customer: Customer = { ...values, id: uid('customer'), balance: 0 };
+    const audit = makeAudit('إضافة عميل', values.name, cur);
+    commit({ ...cur, customers: [customer, ...cur.customers], audit: [audit, ...cur.audit] }, [customerRow(customer), auditRow(audit)]);
+  }, [commit, makeAudit]);
 
   const addSupplier = useCallback((values: Omit<Supplier, 'id' | 'balance'>) => {
-    setState((cur) => ({ ...cur, suppliers: [{ ...values, id: uid('supplier'), balance: 0 }, ...cur.suppliers], audit: [addAudit('إضافة مورد', values.name, cur), ...cur.audit] }));
-  }, [addAudit]);
+    const cur = stateRef.current;
+    const supplier: Supplier = { ...values, id: uid('supplier'), balance: 0 };
+    const audit = makeAudit('إضافة مورد', values.name, cur);
+    commit({ ...cur, suppliers: [supplier, ...cur.suppliers], audit: [audit, ...cur.audit] }, [supplierRow(supplier), auditRow(audit)]);
+  }, [commit, makeAudit]);
 
   const addExpense = useCallback((values: Omit<Expense, 'id' | 'createdAt'>) => {
-    setState((cur) => ({ ...cur, expenses: [{ ...values, id: uid('expense'), createdAt: new Date().toISOString() }, ...cur.expenses], audit: [addAudit('مصروف', `${values.title} — ${values.amount}`, cur), ...cur.audit] }));
-  }, [addAudit]);
+    const cur = stateRef.current;
+    const expense: Expense = { ...values, id: uid('expense'), createdAt: new Date().toISOString() };
+    const audit = makeAudit('مصروف', `${values.title} — ${values.amount}`, cur);
+    commit({ ...cur, expenses: [expense, ...cur.expenses], audit: [audit, ...cur.audit] }, [expenseRow(expense), auditRow(audit)]);
+  }, [commit, makeAudit]);
 
   const completeSale = useCallback((values: Omit<Sale, 'id' | 'invoiceNumber' | 'createdAt' | 'user'>) => {
-    setState((cur) => {
-      const sale: Sale = { ...values, id: uid('sale'), invoiceNumber: `INV-${1000 + cur.sales.length + 1}`, createdAt: new Date().toISOString(), user: cur.loggedInUser ?? 'admin' };
+    void (async () => {
+      // رقم فاتورة متسلسل فريد من عدّاد القاعدة — لا يتكرر مع الحذف أو الاستعادة
+      const seq = await db.nextCounter('sale', COUNTER_SEEDS.sale);
+      const cur = stateRef.current;
+      const productById = new Map(cur.products.map((p) => [p.id, p]));
+      // تثبيت تكلفة كل صنف لحظة البيع
+      const items: CartLine[] = values.items.map((item) => ({ ...item, costPrice: productById.get(item.productId)?.purchasePrice ?? 0 }));
+      const sale: Sale = { ...values, items, id: uid('sale'), invoiceNumber: `INV-${seq}`, createdAt: new Date().toISOString(), user: cur.loggedInUser ?? 'admin' };
+      const touched: Product[] = [];
       const products = cur.products.map((p) => {
-        const line = values.items.find((item) => item.productId === p.id);
-        return line ? { ...p, stock: Math.max(0, p.stock - line.quantity) } : p;
+        const line = items.find((item) => item.productId === p.id);
+        if (!line) return p;
+        const updated = { ...p, stock: Math.max(0, p.stock - line.quantity) };
+        touched.push(updated);
+        return updated;
       });
+      const debt = Math.max(0, values.total - values.paid);
+      const ledger: LedgerEntry[] = values.customerId && debt > 0
+        ? [{ id: uid('ct'), partyId: values.customerId, kind: 'debt', amount: debt, ref: sale.invoiceNumber, createdAt: sale.createdAt, user: sale.user }]
+        : [];
       const customers = values.customerId
-        ? cur.customers.map((c) => c.id === values.customerId ? { ...c, balance: c.balance + Math.max(0, values.total - values.paid) } : c)
+        ? cur.customers.map((c) => (c.id === values.customerId ? { ...c, balance: c.balance + debt } : c))
         : cur.customers;
-      // update active shift sales
-      const shifts = cur.shifts.map((s) => s.status === 'open' ? { ...s, salesTotal: s.salesTotal + values.total, cashIn: s.cashIn + (values.paymentMethod === 'نقدي' ? values.paid : 0) } : s);
-      return { ...cur, products, customers, shifts, sales: [sale, ...cur.sales], audit: [addAudit('بيع', `${sale.invoiceNumber} — ${sale.total.toFixed(2)} د.ل`, cur), ...cur.audit] };
-    });
-  }, [addAudit]);
+      const touchedCustomer = customers.find((c) => c.id === values.customerId);
+      const shifts = cur.shifts.map((s) => (s.status === 'open' ? { ...s, salesTotal: s.salesTotal + values.total, cashIn: s.cashIn + (values.paymentMethod === 'نقدي' ? values.paid : 0) } : s));
+      const openShiftRow = shifts.find((s) => s.status === 'open');
+      const audit = makeAudit('بيع', `${sale.invoiceNumber} — ${sale.total.toFixed(2)} د.ل`, cur);
+      const next: AppState = { ...cur, products, customers, shifts, sales: [sale, ...cur.sales], customerTransactions: [...ledger, ...cur.customerTransactions], audit: [audit, ...cur.audit] };
+      const ops: UpsertOp[] = [
+        ...saleOps(sale),
+        ...touched.map(productRow),
+        ...(touchedCustomer ? [customerRow(touchedCustomer)] : []),
+        ...ledger.map(customerTxRow),
+        ...(openShiftRow ? [shiftRow(openShiftRow)] : []),
+        auditRow(audit),
+      ];
+      commit(next, ops);
+    })();
+  }, [commit, makeAudit]);
 
   const addPurchase = useCallback((values: Omit<Purchase, 'id' | 'invoiceNumber' | 'createdAt' | 'user'>) => {
-    setState((cur) => {
-      const purchase: Purchase = { ...values, id: uid('purchase'), invoiceNumber: `PUR-${100 + cur.purchases.length + 1}`, createdAt: new Date().toISOString(), user: cur.loggedInUser ?? 'admin' };
-      // increase stock and update purchase price
+    void (async () => {
+      const seq = await db.nextCounter('purchase', COUNTER_SEEDS.purchase);
+      const cur = stateRef.current;
+      const purchase: Purchase = { ...values, id: uid('purchase'), invoiceNumber: `PUR-${seq}`, createdAt: new Date().toISOString(), user: cur.loggedInUser ?? 'admin' };
+      const touched: Product[] = [];
       const products = cur.products.map((p) => {
         const line = values.items.find((item) => item.productId === p.id);
-        return line ? { ...p, stock: p.stock + line.quantity, purchasePrice: line.unitCost } : p;
+        if (!line) return p;
+        const updated = { ...p, stock: p.stock + line.quantity, purchasePrice: line.unitCost };
+        touched.push(updated);
+        return updated;
       });
-      // update supplier balance (amount owed to supplier)
+      const debt = Math.max(0, values.total - values.paid);
+      const ledger: LedgerEntry[] = values.supplierId && debt > 0
+        ? [{ id: uid('st'), partyId: values.supplierId, kind: 'debt', amount: debt, ref: purchase.invoiceNumber, createdAt: purchase.createdAt, user: purchase.user }]
+        : [];
       const suppliers = values.supplierId
-        ? cur.suppliers.map((s) => s.id === values.supplierId ? { ...s, balance: s.balance + Math.max(0, values.total - values.paid) } : s)
+        ? cur.suppliers.map((s) => (s.id === values.supplierId ? { ...s, balance: s.balance + debt } : s))
         : cur.suppliers;
-      const shifts = cur.shifts.map((s) => s.status === 'open' ? { ...s, purchasesTotal: s.purchasesTotal + values.total, cashOut: s.cashOut + (values.paid ?? 0) } : s);
-      return { ...cur, products, suppliers, shifts, purchases: [purchase, ...cur.purchases], audit: [addAudit('مشتريات', `${purchase.invoiceNumber} — ${purchase.total.toFixed(2)} د.ل`, cur), ...cur.audit] };
-    });
-  }, [addAudit]);
+      const touchedSupplier = suppliers.find((s) => s.id === values.supplierId);
+      const shifts = cur.shifts.map((s) => (s.status === 'open' ? { ...s, purchasesTotal: s.purchasesTotal + values.total, cashOut: s.cashOut + (values.paid ?? 0) } : s));
+      const openShiftRow = shifts.find((s) => s.status === 'open');
+      const audit = makeAudit('مشتريات', `${purchase.invoiceNumber} — ${purchase.total.toFixed(2)} د.ل`, cur);
+      const next: AppState = { ...cur, products, suppliers, shifts, purchases: [purchase, ...cur.purchases], supplierTransactions: [...ledger, ...cur.supplierTransactions], audit: [audit, ...cur.audit] };
+      const ops: UpsertOp[] = [
+        ...purchaseOps(purchase),
+        ...touched.map(productRow),
+        ...(touchedSupplier ? [supplierRow(touchedSupplier)] : []),
+        ...ledger.map(supplierTxRow),
+        ...(openShiftRow ? [shiftRow(openShiftRow)] : []),
+        auditRow(audit),
+      ];
+      commit(next, ops);
+    })();
+  }, [commit, makeAudit]);
 
   const addReturn = useCallback((values: Omit<SaleReturn, 'id' | 'returnNumber' | 'createdAt' | 'user'>) => {
-    setState((cur) => {
-      const ret: SaleReturn = { ...values, id: uid('return'), returnNumber: `RET-${10 + cur.returns.length + 1}`, createdAt: new Date().toISOString(), user: cur.loggedInUser ?? 'admin' };
-      // restore stock
+    void (async () => {
+      const seq = await db.nextCounter('return', COUNTER_SEEDS.return);
+      const cur = stateRef.current;
+      const ret: SaleReturn = { ...values, id: uid('return'), returnNumber: `RET-${seq}`, createdAt: new Date().toISOString(), user: cur.loggedInUser ?? 'admin' };
+      const touched: Product[] = [];
       const products = cur.products.map((p) => {
         const line = values.items.find((item) => item.productId === p.id);
-        return line ? { ...p, stock: p.stock + line.quantity } : p;
+        if (!line) return p;
+        const updated = { ...p, stock: p.stock + line.quantity };
+        touched.push(updated);
+        return updated;
       });
-      // mark sale as returned
-      const sales = cur.sales.map((s) => s.id === values.saleId ? { ...s, returned: true } : s);
-      const shifts = cur.shifts.map((s) => s.status === 'open' ? { ...s, cashOut: s.cashOut + values.total } : s);
-      return { ...cur, products, sales, shifts, returns: [ret, ...cur.returns], audit: [addAudit('مرتجع', `${ret.returnNumber} — ${ret.total.toFixed(2)} د.ل`, cur), ...cur.audit] };
-    });
-  }, [addAudit]);
+      const sales = cur.sales.map((s) => (s.id === values.saleId ? { ...s, returned: true } : s));
+      const returnedSale = sales.find((s) => s.id === values.saleId);
+      const shifts = cur.shifts.map((s) => (s.status === 'open' ? { ...s, cashOut: s.cashOut + values.total } : s));
+      const openShiftRow = shifts.find((s) => s.status === 'open');
+      const audit = makeAudit('مرتجع', `${ret.returnNumber} — ${ret.total.toFixed(2)} د.ل`, cur);
+      const next: AppState = { ...cur, products, sales, shifts, returns: [ret, ...cur.returns], audit: [audit, ...cur.audit] };
+      const ops: UpsertOp[] = [
+        ...returnOps(ret),
+        ...touched.map(productRow),
+        ...(returnedSale ? saleOps(returnedSale) : []),
+        ...(openShiftRow ? [shiftRow(openShiftRow)] : []),
+        auditRow(audit),
+      ];
+      commit(next, ops);
+    })();
+  }, [commit, makeAudit]);
 
   const collectFromCustomer = useCallback((customerId: string, amount: number) => {
-    setState((cur) => {
-      const customers = cur.customers.map((c) => c.id === customerId ? { ...c, balance: Math.max(0, c.balance - amount) } : c);
-      const customer = cur.customers.find((c) => c.id === customerId);
-      const shifts = cur.shifts.map((s) => s.status === 'open' ? { ...s, cashIn: s.cashIn + amount } : s);
-      return { ...cur, customers, shifts, audit: [addAudit('تحصيل دين', `${customer?.name ?? customerId} — ${amount.toFixed(2)} د.ل`, cur), ...cur.audit] };
-    });
-  }, [addAudit]);
+    const cur = stateRef.current;
+    const customer = cur.customers.find((c) => c.id === customerId);
+    if (!customer) return;
+    const updated = { ...customer, balance: Math.max(0, customer.balance - amount) };
+    const entry: LedgerEntry = { id: uid('ct'), partyId: customerId, kind: 'payment', amount, ref: 'تحصيل', createdAt: new Date().toISOString(), user: cur.loggedInUser ?? 'admin' };
+    const shifts = cur.shifts.map((s) => (s.status === 'open' ? { ...s, cashIn: s.cashIn + amount } : s));
+    const openShiftRow = shifts.find((s) => s.status === 'open');
+    const audit = makeAudit('تحصيل دين', `${customer.name} — ${amount.toFixed(2)} د.ل`, cur);
+    const next = { ...cur, customers: cur.customers.map((c) => (c.id === customerId ? updated : c)), shifts, customerTransactions: [entry, ...cur.customerTransactions], audit: [audit, ...cur.audit] };
+    commit(next, [customerRow(updated), customerTxRow(entry), ...(openShiftRow ? [shiftRow(openShiftRow)] : []), auditRow(audit)]);
+  }, [commit, makeAudit]);
 
   const payToSupplier = useCallback((supplierId: string, amount: number) => {
-    setState((cur) => {
-      const suppliers = cur.suppliers.map((s) => s.id === supplierId ? { ...s, balance: Math.max(0, s.balance - amount) } : s);
-      const supplier = cur.suppliers.find((s) => s.id === supplierId);
-      const shifts = cur.shifts.map((s) => s.status === 'open' ? { ...s, cashOut: s.cashOut + amount } : s);
-      return { ...cur, suppliers, shifts, audit: [addAudit('سداد لمورد', `${supplier?.name ?? supplierId} — ${amount.toFixed(2)} د.ل`, cur), ...cur.audit] };
-    });
-  }, [addAudit]);
+    const cur = stateRef.current;
+    const supplier = cur.suppliers.find((s) => s.id === supplierId);
+    if (!supplier) return;
+    const updated = { ...supplier, balance: Math.max(0, supplier.balance - amount) };
+    const entry: LedgerEntry = { id: uid('st'), partyId: supplierId, kind: 'payment', amount, ref: 'سداد', createdAt: new Date().toISOString(), user: cur.loggedInUser ?? 'admin' };
+    const shifts = cur.shifts.map((s) => (s.status === 'open' ? { ...s, cashOut: s.cashOut + amount } : s));
+    const openShiftRow = shifts.find((s) => s.status === 'open');
+    const audit = makeAudit('سداد لمورد', `${supplier.name} — ${amount.toFixed(2)} د.ل`, cur);
+    const next = { ...cur, suppliers: cur.suppliers.map((s) => (s.id === supplierId ? updated : s)), shifts, supplierTransactions: [entry, ...cur.supplierTransactions], audit: [audit, ...cur.audit] };
+    commit(next, [supplierRow(updated), supplierTxRow(entry), ...(openShiftRow ? [shiftRow(openShiftRow)] : []), auditRow(audit)]);
+  }, [commit, makeAudit]);
 
   const openShift = useCallback((openingBalance: number) => {
-    setState((cur) => {
-      const shift: Shift = { id: uid('shift'), openedAt: new Date().toISOString(), openingBalance, salesTotal: 0, expensesTotal: 0, purchasesTotal: 0, cashIn: 0, cashOut: 0, status: 'open', user: cur.loggedInUser ?? 'admin', notes: '' };
-      return { ...cur, shifts: [shift, ...cur.shifts], audit: [addAudit('فتح وردية', `رصيد افتتاحي ${openingBalance.toFixed(2)} د.ل`, cur), ...cur.audit] };
-    });
-  }, [addAudit]);
+    const cur = stateRef.current;
+    const shift: Shift = { id: uid('shift'), openedAt: new Date().toISOString(), openingBalance, salesTotal: 0, expensesTotal: 0, purchasesTotal: 0, cashIn: 0, cashOut: 0, status: 'open', user: cur.loggedInUser ?? 'admin', notes: '' };
+    const audit = makeAudit('فتح وردية', `رصيد افتتاحي ${openingBalance.toFixed(2)} د.ل`, cur);
+    commit({ ...cur, shifts: [shift, ...cur.shifts], audit: [audit, ...cur.audit] }, [shiftRow(shift), auditRow(audit)]);
+  }, [commit, makeAudit]);
 
   const closeShift = useCallback((closingBalance: number, notes: string) => {
-    setState((cur) => {
-      const shifts = cur.shifts.map((s) => {
-        if (s.status !== 'open') return s;
-        const expected = s.openingBalance + s.cashIn - s.cashOut;
-        return { ...s, closedAt: new Date().toISOString(), closingBalance, expectedBalance: expected, status: 'closed' as const, notes };
-      });
-      return { ...cur, shifts, audit: [addAudit('إغلاق وردية', `رصيد ختامي ${closingBalance.toFixed(2)} د.ل`, cur), ...cur.audit] };
+    const cur = stateRef.current;
+    let closed: Shift | null = null;
+    const shifts = cur.shifts.map((s) => {
+      if (s.status !== 'open') return s;
+      const expected = s.openingBalance + s.cashIn - s.cashOut;
+      closed = { ...s, closedAt: new Date().toISOString(), closingBalance, expectedBalance: expected, status: 'closed' as const, notes };
+      return closed;
     });
-  }, [addAudit]);
+    if (!closed) return;
+    const audit = makeAudit('إغلاق وردية', `رصيد ختامي ${closingBalance.toFixed(2)} د.ل`, cur);
+    commit({ ...cur, shifts, audit: [audit, ...cur.audit] }, [shiftRow(closed), auditRow(audit)]);
+  }, [commit, makeAudit]);
 
-  const setTheme = useCallback((mode: ThemeMode, name: ThemeName) => setState((cur) => ({ ...cur, themeMode: mode, themeName: name })), []);
-  const setUsdRate = useCallback((rate: number) => setState((cur) => ({ ...cur, usdRate: rate, audit: [addAudit('سعر الدولار', rate.toFixed(2), cur), ...cur.audit] })), [addAudit]);
-  const shareBackupText = useCallback(() => JSON.stringify({ exportedAt: new Date().toISOString(), app: 'Shahboun Sales', version: state.version, state }), [state]);
+  const setTheme = useCallback((mode: ThemeMode, name: ThemeName) => {
+    const cur = stateRef.current;
+    const next = { ...cur, themeMode: mode, themeName: name };
+    commit(next, [settingRow('theme_mode', mode), settingRow('theme_name', name)]);
+  }, [commit]);
+
+  const setUsdRate = useCallback((rate: number) => {
+    const cur = stateRef.current;
+    const audit = makeAudit('سعر الدولار', rate.toFixed(2), cur);
+    commit({ ...cur, usdRate: rate, audit: [audit, ...cur.audit] }, [settingRow('usd_rate', String(rate)), auditRow(audit)]);
+  }, [commit, makeAudit]);
 
   const completeSetup = useCallback((profile: StoreProfile) => {
-    setState((cur) => ({ ...cur, storeProfile: profile, setupComplete: true, audit: [addAudit('إعداد أولي', `تسجيل بيانات المتجر: ${profile.storeName}`, cur), ...cur.audit] }));
-  }, [addAudit]);
+    const cur = stateRef.current;
+    const audit = makeAudit('إعداد أولي', `تسجيل بيانات المتجر: ${profile.storeName}`, cur);
+    const next = { ...cur, storeProfile: profile, setupComplete: true, audit: [audit, ...cur.audit] };
+    commit(next, [storeProfileRow(profile), settingRow('setup_complete', '1'), auditRow(audit)]);
+  }, [commit, makeAudit]);
 
   const updateStoreProfile = useCallback((values: Partial<StoreProfile>) => {
-    setState((cur) => ({ ...cur, storeProfile: { ...cur.storeProfile, ...values }, audit: [addAudit('تعديل بيانات المتجر', Object.keys(values).join('، '), cur), ...cur.audit] }));
-  }, [addAudit]);
+    const cur = stateRef.current;
+    const profile = { ...cur.storeProfile, ...values };
+    const audit = makeAudit('تعديل بيانات المتجر', Object.keys(values).join('، '), cur);
+    commit({ ...cur, storeProfile: profile, audit: [audit, ...cur.audit] }, [storeProfileRow(profile), auditRow(audit)]);
+  }, [commit, makeAudit]);
+
+  const createBackup = useCallback(async () => {
+    try {
+      return await createBackupFile();
+    } catch (error) {
+      console.error('Backup failed:', error);
+      return { ok: false, message: 'فشل إنشاء النسخة الاحتياطية.' };
+    }
+  }, []);
+
+  const restoreBackup = useCallback(async () => {
+    try {
+      const result = await restoreFromPickedFile();
+      if (result.ok && result.state) {
+        stateRef.current = result.state;
+        setState(result.state);
+      }
+      return { ok: result.ok, message: result.message };
+    } catch (error) {
+      console.error('Restore failed:', error);
+      return { ok: false, message: 'فشلت الاستعادة — لم تُمَس البيانات الحالية.' };
+    }
+  }, []);
 
   const value = useMemo(() => ({
     state, loading, login, changePassword, logout,
     addProduct, updateProduct, addCustomer, addSupplier, addExpense,
     completeSale, addPurchase, addReturn, collectFromCustomer, payToSupplier,
-    openShift, closeShift, setTheme, setUsdRate, shareBackupText, completeSetup, updateStoreProfile,
-  }), [state, loading, login, changePassword, logout, addProduct, updateProduct, addCustomer, addSupplier, addExpense, completeSale, addPurchase, addReturn, collectFromCustomer, payToSupplier, openShift, closeShift, setTheme, setUsdRate, shareBackupText, completeSetup, updateStoreProfile]);
+    openShift, closeShift, setTheme, setUsdRate, completeSetup, updateStoreProfile,
+    createBackup, restoreBackup,
+  }), [state, loading, login, changePassword, logout, addProduct, updateProduct, addCustomer, addSupplier, addExpense, completeSale, addPurchase, addReturn, collectFromCustomer, payToSupplier, openShift, closeShift, setTheme, setUsdRate, completeSetup, updateStoreProfile, createBackup, restoreBackup]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }
