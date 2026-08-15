@@ -1,0 +1,39 @@
+const { withMainApplication, withDangerousMod } = require('expo/config-plugins');
+const fs=require('fs');const path=require('path');
+const IMPORT='import com.shahboun.sales.host.ShahbounHostPackage';
+function register(config){return withMainApplication(config,cfg=>{let s=cfg.modResults.contents;if(!s.includes(IMPORT)){const a='import expo.modules.ApplicationLifecycleDispatcher';s=s.replace(a,`${IMPORT}\n\n${a}`)}if(!s.includes('add(ShahbounHostPackage())'))s=s.replace('// add(MyReactNativePackage())','// Shahboun LAN host server\n              add(ShahbounHostPackage())');cfg.modResults.contents=s;return cfg})}
+const KT=String.raw`package com.shahboun.sales.host
+
+import com.facebook.react.ReactPackage
+import com.facebook.react.bridge.*
+import com.facebook.react.modules.core.DeviceEventManagerModule
+import com.facebook.react.uimanager.ViewManager
+import java.io.*
+import java.net.*
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
+
+class ShahbounHostPackage:ReactPackage{
+ override fun createNativeModules(c:ReactApplicationContext):List<NativeModule> = listOf(ShahbounHostModule(c))
+ override fun createViewManagers(c:ReactApplicationContext):List<ViewManager<*,*>> = emptyList()
+}
+
+class ShahbounHostModule(private val ctx:ReactApplicationContext):ReactContextBaseJavaModule(ctx){
+ private var server:ServerSocket?=null
+ private val running=AtomicBoolean(false)
+ private val pending=ConcurrentHashMap<String,Socket>()
+ override fun getName()="ShahbounHost"
+ @ReactMethod fun addListener(name:String){}
+ @ReactMethod fun removeListeners(count:Int){}
+ private fun ip():String{try{val ns=NetworkInterface.getNetworkInterfaces();while(ns.hasMoreElements()){val n=ns.nextElement();if(!n.isUp||n.isLoopback)continue;val asx=n.inetAddresses;while(asx.hasMoreElements()){val a=asx.nextElement();if(a is Inet4Address&&!a.isLoopbackAddress&&a.isSiteLocalAddress)return a.hostAddress?:"127.0.0.1"}}}catch(_:Throwable){};return "127.0.0.1"}
+ private fun mime(p:String)=when{p.endsWith(".html")->"text/html; charset=utf-8";p.endsWith(".js")->"application/javascript; charset=utf-8";p.endsWith(".css")->"text/css; charset=utf-8";p.endsWith(".json")->"application/json; charset=utf-8";p.endsWith(".svg")->"image/svg+xml";p.endsWith(".png")->"image/png";p.endsWith(".jpg")||p.endsWith(".jpeg")->"image/jpeg";p.endsWith(".woff2")->"font/woff2";else->"application/octet-stream"}
+ private fun send(s:Socket,status:Int,type:String,body:ByteArray){try{val reason=when(status){200->"OK";201->"Created";400->"Bad Request";401->"Unauthorized";403->"Forbidden";404->"Not Found";500->"Internal Server Error";else->"OK"};val o=BufferedOutputStream(s.getOutputStream());val h="HTTP/1.1 $status $reason\r\nContent-Type: $type\r\nContent-Length: \${body.size}\r\nCache-Control: no-store\r\nConnection: close\r\nX-Shahboun-Host: 6.0.0\r\nAccess-Control-Allow-Origin: *\r\n\r\n";o.write(h.toByteArray(Charsets.UTF_8));o.write(body);o.flush()}catch(_:Throwable){}finally{try{s.close()}catch(_:Throwable){}}}
+ private fun static(s:Socket,raw:String):Boolean{val clean=raw.substringBefore('?').replace("..","");val p=if(clean=="/")"index.html" else clean.trimStart('/');try{val b=ctx.assets.open("shahboun-web/$p").use{it.readBytes()};send(s,200,mime(p),b);return true}catch(_:Throwable){if(!p.contains('.'))try{val b=ctx.assets.open("shahboun-web/index.html").use{it.readBytes()};send(s,200,"text/html; charset=utf-8",b);return true}catch(_:Throwable){}};return false}
+ private fun client(s:Socket){try{s.soTimeout=15000;val r=BufferedReader(InputStreamReader(s.getInputStream(),Charsets.UTF_8));val first=r.readLine()?:return send(s,400,"text/plain","Bad Request".toByteArray());val bits=first.split(" ");if(bits.size<2)return send(s,400,"text/plain","Bad Request".toByteArray());val method=bits[0].uppercase();val reqPath=bits[1];var len=0;val hs=HashMap<String,String>();while(true){val line=r.readLine()?:break;if(line.isEmpty())break;val i=line.indexOf(':');if(i>0){val k=line.substring(0,i).trim().lowercase();val v=line.substring(i+1).trim();hs[k]=v;if(k=="content-length")len=v.toIntOrNull()?:0}};val body=if(len in 1..2000000)CharArray(len).also{var o=0;while(o<len){val n=r.read(it,o,len-o);if(n<=0)break;o+=n}}.concatToString() else "";if(!reqPath.startsWith("/api/")){if(!static(s,reqPath))send(s,404,"text/plain; charset=utf-8","Not Found".toByteArray());return};if(reqPath.substringBefore('?')=="/api/health")return send(s,200,"application/json; charset=utf-8","{\"ok\":true,\"service\":\"Shahboun Android Host\",\"version\":\"6.0.0\"}".toByteArray());val id=java.util.UUID.randomUUID().toString();pending[id]=s;val m=Arguments.createMap();m.putString("id",id);m.putString("method",method);m.putString("path",reqPath);m.putString("body",body);val hm=Arguments.createMap();for((k,v) in hs)hm.putString(k,v);m.putMap("headers",hm);ctx.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java).emit("ShahbounHostRequest",m);android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({pending.remove(id)?.let{send(it,500,"application/json","{\"error\":\"HOST_TIMEOUT\"}".toByteArray())}},12000)}catch(_:Throwable){try{s.close()}catch(_:Throwable){}}}
+ @ReactMethod fun startHostServer(port:Int,p:Promise){if(running.get()){p.resolve("http://\${ip()}:\${server?.localPort?:port}");return};try{val ss=ServerSocket(if(port in 1024..65535)port else 8787);server=ss;running.set(true);Thread{while(running.get())try{val c=ss.accept();Thread{client(c)}.start()}catch(_:Throwable){}}.apply{name="ShahbounHostServer";isDaemon=true;start()};p.resolve("http://\${ip()}:\${ss.localPort}")}catch(e:Throwable){running.set(false);p.reject("HOST_START_FAILED",e.message,e)}}
+ @ReactMethod fun stopHostServer(p:Promise){running.set(false);try{server?.close()}catch(_:Throwable){};server=null;for((_,s)in pending)try{s.close()}catch(_:Throwable){};pending.clear();p.resolve(true)}
+ @ReactMethod fun getHostServerUrl(p:Promise){p.resolve(if(running.get())"http://\${ip()}:\${server?.localPort?:8787}" else null)}
+ @ReactMethod fun respondHostRequest(id:String,status:Int,type:String,body:String,p:Promise){val s=pending.remove(id);if(s==null){p.resolve(false);return};send(s,if(status in 100..599)status else 200,if(type.isBlank())"application/json; charset=utf-8" else type,body.toByteArray(Charsets.UTF_8));p.resolve(true)}
+}`;
+function native(config){return withDangerousMod(config,['android',async cfg=>{const root=cfg.modRequest.platformProjectRoot;const dir=path.join(root,'app','src','main','java','com','shahboun','sales','host');fs.mkdirSync(dir,{recursive:true});fs.writeFileSync(path.join(dir,'ShahbounHostModule.kt'),KT,'utf8');return cfg}])}
+module.exports=function withShahbounHost(config){return native(register(config))};
