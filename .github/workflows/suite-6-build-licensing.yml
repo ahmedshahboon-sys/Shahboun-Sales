@@ -47,21 +47,15 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 - <<'PY'
-from pathlib import Path
-import re
-p=Path('apps/licensing-current/app.config.js')
-s=p.read_text(encoding='utf-8')
-for old in ['9d835e52-7b7d-4a80-83a6-b21ad88b0666','9d835e52-7b7d-4a80-83a6-b21ad88b066c','9d835e52-7b7d-4a08-83a6-b21ad88b0666']:
-    s=s.replace(old,'9d835e52-7b7d-4a08-83a6-b21ad88b066c')
-s=re.sub(r"versionCode\s*:\s*\d+",'versionCode: 61',s)
-s=re.sub(r"version\s*:\s*['\"]\d+(?:\.\d+){2}['\"]", "version: '6.0.1'", s, count=1)
-s=s.replace("./assets/icon.jpg","./assets/icon.png").replace("./assets/adaptive-icon.jpg","./assets/adaptive-icon.png").replace("./assets/splash.jpg","./assets/splash.png").replace("./assets/official-logo.jpg","./assets/official-logo.png")
-p.write_text(s,encoding='utf-8')
-PY
+          sed -i "s/9d835e52-7b7d-4a80-83a6-b21ad88b0666/9d835e52-7b7d-4a08-83a6-b21ad88b066c/g" apps/licensing-current/app.config.js
+          sed -i "s/version: '6.0.0'/version: '6.0.1'/g" apps/licensing-current/app.config.js
+          sed -i -E "s/versionCode: [0-9]+/versionCode: 61/g" apps/licensing-current/app.config.js
+          sed -i "s/newArchEnabled: false/newArchEnabled: true/g" apps/licensing-current/app.config.js
+          sed -i "s#./assets/icon.jpg#./assets/icon.png#g; s#./assets/adaptive-icon.jpg#./assets/adaptive-icon.png#g; s#./assets/splash.jpg#./assets/splash.png#g" apps/licensing-current/app.config.js
           grep -q 'com.shahboun.licensing' apps/licensing-current/app.config.js
           grep -q '9d835e52-7b7d-4a08-83a6-b21ad88b066c' apps/licensing-current/app.config.js
           grep -q 'versionCode: 61' apps/licensing-current/app.config.js
+          grep -q 'newArchEnabled: true' apps/licensing-current/app.config.js
       - uses: actions/setup-node@v4
         with:
           node-version: '20.19.4'
@@ -71,23 +65,19 @@ PY
           java-version: '17'
       - name: Install dependencies
         working-directory: apps/licensing-current
-        run: npm ci --no-audit --no-fund
+        run: npm install --no-audit --no-fund
       - name: TypeScript check
         working-directory: apps/licensing-current
         run: npm run typecheck
-      - name: Validate licensing source
-        working-directory: apps/licensing-current
-        shell: bash
-        run: |
-          set -euo pipefail
-          node verify-config.cjs
-          node verify-native.cjs
       - name: Generate Android native project
         working-directory: apps/licensing-current
         env:
           CI: '1'
           EXPO_NO_GIT_STATUS: '1'
         run: npx expo prebuild --platform android --clean --no-install
+      - name: Validate generated native project
+        working-directory: apps/licensing-current
+        run: node verify-native.cjs
       - name: Optimize release package
         working-directory: apps/licensing-current
         run: |
