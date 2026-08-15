@@ -1,0 +1,120 @@
+name: Build Shahboun Licensing 6.0.1 V2
+
+on:
+  push:
+    branches:
+      - suite-6.0.0
+    paths:
+      - '.github/workflows/suite-6-build-licensing-v2.yml'
+      - '.ci-assets/licensing-src-6.0.1-good.b64'
+      - '.ci-assets/official-logo.b64.*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Restore licensing source
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf apps/licensing-current
+          mkdir -p apps/licensing-current
+          base64 -d .ci-assets/licensing-src-6.0.1-good.b64 > /tmp/licensing.tgz
+          gzip -t /tmp/licensing.tgz
+          tar -xzf /tmp/licensing.tgz -C apps/licensing-current
+          test -f apps/licensing-current/App.tsx
+          test -f apps/licensing-current/app.config.js
+
+      - name: Prepare exact approved logo
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p apps/licensing-current/assets
+          cat .ci-assets/official-logo.b64.* | base64 -d > /tmp/logo-source.jpg
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq imagemagick
+          convert /tmp/logo-source.jpg -auto-orient -strip PNG32:apps/licensing-current/assets/official-logo.png
+          cp apps/licensing-current/assets/official-logo.png apps/licensing-current/assets/icon.png
+          cp apps/licensing-current/assets/official-logo.png apps/licensing-current/assets/adaptive-icon.png
+          cp apps/licensing-current/assets/official-logo.png apps/licensing-current/assets/splash.png
+
+      - name: Pin historical identity and release metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          sed -i 's/9d835e52-7b7d-4a80-83a6-b21ad88b0666/9d835e52-7b7d-4a08-83a6-b21ad88b066c/g' apps/licensing-current/app.config.js
+          sed -i "s/version: '6.0.0'/version: '6.0.1'/g" apps/licensing-current/app.config.js
+          sed -i -E 's/versionCode: [0-9]+/versionCode: 61/g' apps/licensing-current/app.config.js
+          sed -i 's/newArchEnabled: false/newArchEnabled: true/g' apps/licensing-current/app.config.js
+          sed -i 's#./assets/icon.jpg#./assets/icon.png#g' apps/licensing-current/app.config.js
+          sed -i 's#./assets/adaptive-icon.jpg#./assets/adaptive-icon.png#g' apps/licensing-current/app.config.js
+          sed -i 's#./assets/splash.jpg#./assets/splash.png#g' apps/licensing-current/app.config.js
+          grep -Fq 'com.shahboun.licensing' apps/licensing-current/app.config.js
+          grep -Fq '9d835e52-7b7d-4a08-83a6-b21ad88b066c' apps/licensing-current/app.config.js
+          grep -Fq 'versionCode: 61' apps/licensing-current/app.config.js
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.19.4'
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install dependencies
+        working-directory: apps/licensing-current
+        run: npm install --no-audit --no-fund
+
+      - name: TypeScript check
+        working-directory: apps/licensing-current
+        run: npm run typecheck
+
+      - name: Expo prebuild
+        working-directory: apps/licensing-current
+        env:
+          CI: '1'
+          EXPO_NO_GIT_STATUS: '1'
+        run: npx expo prebuild --platform android --clean --no-install
+
+      - name: Verify native identity
+        working-directory: apps/licensing-current
+        run: node verify-native.cjs
+
+      - name: Build APK
+        working-directory: apps/licensing-current/android
+        env:
+          NODE_ENV: production
+          GRADLE_OPTS: -Dorg.gradle.jvmargs=-Xmx4g -Dorg.gradle.daemon=false
+        run: |
+          printf '\nreactNativeArchitectures=arm64-v8a,armeabi-v7a\nandroid.enableMinifyInReleaseBuilds=true\nandroid.enableShrinkResourcesInReleaseBuilds=true\n' >> gradle.properties
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon --stacktrace
+
+      - name: Package result
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp apps/licensing-current/android/app/build/outputs/apk/release/app-release.apk dist/Shahboun_Licensing_6.0.1.apk
+          sha256sum dist/Shahboun_Licensing_6.0.1.apk > dist/Shahboun_Licensing_6.0.1.apk.sha256
+          APKSIGNER=$(find "${ANDROID_HOME}/build-tools" -type f -name apksigner | sort -V | tail -1)
+          "$APKSIGNER" verify --print-certs dist/Shahboun_Licensing_6.0.1.apk > dist/Shahboun_Licensing_6.0.1.signing.txt
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Shahboun-Licensing-6.0.1
+          path: dist/
+          if-no-files-found: error
+          retention-days: 30
