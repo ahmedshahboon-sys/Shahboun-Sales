@@ -1,0 +1,92 @@
+name: Build Shahboun Licensing 6.0.1
+
+on:
+  push:
+    branches: [suite-6.0.0]
+    paths:
+      - '.ci-assets/licensing-src.b64.*'
+      - '.ci-assets/official-logo.b64.*'
+      - '.github/workflows/suite-6-build-licensing.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  licensing-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore Licensing source and approved logo
+        shell: bash
+        run: |
+          rm -rf apps/licensing-current
+          mkdir -p apps/licensing-current
+          cat .ci-assets/licensing-src.b64.* | base64 -d > /tmp/licensing.tgz
+          tar -xzf /tmp/licensing.tgz -C apps/licensing-current
+          mkdir -p apps/licensing-current/assets
+          cat .ci-assets/official-logo.b64.* | base64 -d > apps/licensing-current/assets/official-logo.jpg
+          cp apps/licensing-current/assets/official-logo.jpg apps/licensing-current/assets/icon.jpg
+          cp apps/licensing-current/assets/official-logo.jpg apps/licensing-current/assets/adaptive-icon.jpg
+          cp apps/licensing-current/assets/official-logo.jpg apps/licensing-current/assets/splash.jpg
+          test -s apps/licensing-current/App.tsx
+          test -s apps/licensing-current/assets/official-logo.jpg
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20.19.4'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install dependencies
+        working-directory: apps/licensing-current
+        run: npm install --no-audit --no-fund
+      - name: TypeScript check
+        working-directory: apps/licensing-current
+        run: npm run typecheck
+      - name: Validate licensing source
+        working-directory: apps/licensing-current
+        shell: bash
+        run: |
+          node verify-license-core.js || true
+          node verify-release.js || true
+          grep -q 'com.shahboun.licensing' app.config.js
+          grep -q '9d835e52-7b7d-4a80-83a6-b21ad88b0666' app.config.js
+          grep -q 'versionCode: 61' app.config.js
+      - name: Generate Android native project
+        working-directory: apps/licensing-current
+        env:
+          CI: '1'
+          EXPO_NO_GIT_STATUS: '1'
+        run: npx expo prebuild --platform android --clean --no-install
+      - name: Optimize release package
+        working-directory: apps/licensing-current
+        run: |
+          printf '\nreactNativeArchitectures=arm64-v8a,armeabi-v7a\nandroid.enableMinifyInReleaseBuilds=true\nandroid.enableShrinkResourcesInReleaseBuilds=true\n' >> android/gradle.properties
+      - name: Build release APK
+        working-directory: apps/licensing-current/android
+        env:
+          NODE_ENV: production
+          GRADLE_OPTS: -Dorg.gradle.jvmargs=-Xmx4g -Dorg.gradle.daemon=false
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon --stacktrace
+      - name: Collect and inspect APK
+        shell: bash
+        run: |
+          mkdir -p dist
+          cp apps/licensing-current/android/app/build/outputs/apk/release/app-release.apk dist/Shahboun_Licensing_6.0.1.apk
+          sha256sum dist/Shahboun_Licensing_6.0.1.apk > dist/Shahboun_Licensing_6.0.1.apk.sha256
+          SDKROOT="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+          APKSIGNER=$(find "$SDKROOT/build-tools" -name apksigner -type f | sort -V | tail -1 || true)
+          if [ -n "$APKSIGNER" ]; then "$APKSIGNER" verify --print-certs dist/Shahboun_Licensing_6.0.1.apk | tee dist/Shahboun_Licensing_6.0.1.signing.txt; fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Shahboun-Licensing-6.0.1
+          path: |
+            dist/Shahboun_Licensing_6.0.1.apk
+            dist/Shahboun_Licensing_6.0.1.apk.sha256
+            dist/Shahboun_Licensing_6.0.1.signing.txt
+          if-no-files-found: error
+          retention-days: 30
