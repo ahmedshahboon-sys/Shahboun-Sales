@@ -36,9 +36,13 @@ jobs:
           CI: '1'
           EXPO_NO_GIT_STATUS: '1'
         run: npx expo prebuild --platform android --clean --no-install
+      - name: Optimize release package
+        run: |
+          printf '\nreactNativeArchitectures=arm64-v8a,armeabi-v7a\nandroid.enableMinifyInReleaseBuilds=true\nandroid.enableShrinkResourcesInReleaseBuilds=true\n' >> android/gradle.properties
       - name: Build release APK
         working-directory: apps/android-current/android
         env:
+          NODE_ENV: production
           GRADLE_OPTS: -Dorg.gradle.jvmargs=-Xmx4g -Dorg.gradle.daemon=false
         run: |
           chmod +x gradlew
