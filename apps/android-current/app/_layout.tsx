@@ -5,6 +5,7 @@ import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { HostBridge } from '@/components/HostBridge';
+import { LicenseGate } from '@/components/LicenseGate';
 import { SuiteModeGate } from '@/components/SuiteModeGate';
 import {
   Inter_400Regular,
@@ -29,7 +30,7 @@ function RootLayoutNav() {
 }
 
 function LocalHostApp(){
- return <AppProvider><HostBridge/><GestureHandlerRootView style={{flex:1}}><KeyboardProvider><RootLayoutNav/></KeyboardProvider></GestureHandlerRootView></AppProvider>
+ return <LicenseGate><AppProvider><HostBridge/><GestureHandlerRootView style={{flex:1}}><KeyboardProvider><RootLayoutNav/></KeyboardProvider></GestureHandlerRootView></AppProvider></LicenseGate>
 }
 
 export default function RootLayout() {
