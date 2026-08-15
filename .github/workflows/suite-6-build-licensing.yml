@@ -18,20 +18,81 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
-      - name: Restore Licensing source and approved logo
+      - name: Restore Licensing source safely
         shell: bash
         run: |
-          rm -rf apps/licensing-current
-          mkdir -p apps/licensing-current
+          set -euo pipefail
+          rm -rf apps/licensing-current /tmp/licensing-src
+          mkdir -p apps/licensing-current /tmp/licensing-src
           cat .ci-assets/licensing-src.b64.* | base64 -d > /tmp/licensing.tgz
-          tar -xzf /tmp/licensing.tgz -C apps/licensing-current
-          mkdir -p apps/licensing-current/assets
-          cat .ci-assets/official-logo.b64.* | base64 -d > apps/licensing-current/assets/official-logo.jpg
-          cp apps/licensing-current/assets/official-logo.jpg apps/licensing-current/assets/icon.jpg
-          cp apps/licensing-current/assets/official-logo.jpg apps/licensing-current/assets/adaptive-icon.jpg
-          cp apps/licensing-current/assets/official-logo.jpg apps/licensing-current/assets/splash.jpg
+          # The historical bundle has a damaged gzip footer. First try normal gzip;
+          # if only CRC/length footer is damaged, recover the complete DEFLATE payload safely.
+          if ! gzip -t /tmp/licensing.tgz 2>/tmp/gzip-error.txt; then
+            cat /tmp/gzip-error.txt
+            python3 - <<'PY'
+import zlib, pathlib
+p=pathlib.Path('/tmp/licensing.tgz').read_bytes()
+if len(p) < 18 or p[:2] != b'\x1f\x8b':
+    raise SystemExit('not a gzip stream')
+flg=p[3]; pos=10
+if flg & 4:
+    xlen=int.from_bytes(p[pos:pos+2],'little'); pos += 2+xlen
+if flg & 8:
+    pos=p.index(b'\0',pos)+1
+if flg & 16:
+    pos=p.index(b'\0',pos)+1
+if flg & 2:
+    pos += 2
+raw=p[pos:-8]
+d=zlib.decompressobj(-zlib.MAX_WBITS)
+out=d.decompress(raw)+d.flush()
+if len(out) < 1024:
+    raise SystemExit('recovered payload unexpectedly small')
+pathlib.Path('/tmp/licensing.tar').write_bytes(out)
+print('Recovered tar bytes:',len(out))
+PY
+            tar -xf /tmp/licensing.tar -C apps/licensing-current
+          else
+            tar -xzf /tmp/licensing.tgz -C apps/licensing-current
+          fi
           test -s apps/licensing-current/App.tsx
-          test -s apps/licensing-current/assets/official-logo.jpg
+          test -s apps/licensing-current/package.json
+          test -s apps/licensing-current/app.config.js
+          echo 'Licensing source restored:'
+          find apps/licensing-current -maxdepth 2 -type f | sort
+      - name: Restore approved Shahboun logo as safe PNG
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p apps/licensing-current/assets
+          cat .ci-assets/official-logo.b64.* | base64 -d > /tmp/official-logo-source.jpg
+          sudo apt-get update -y >/dev/null
+          sudo apt-get install -y imagemagick >/dev/null
+          convert /tmp/official-logo-source.jpg -auto-orient -strip PNG32:apps/licensing-current/assets/official-logo.png
+          cp apps/licensing-current/assets/official-logo.png apps/licensing-current/assets/icon.png
+          cp apps/licensing-current/assets/official-logo.png apps/licensing-current/assets/adaptive-icon.png
+          cp apps/licensing-current/assets/official-logo.png apps/licensing-current/assets/splash.png
+          identify apps/licensing-current/assets/official-logo.png
+      - name: Repair only release metadata paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+from pathlib import Path
+p=Path('apps/licensing-current/app.config.js')
+s=p.read_text(encoding='utf-8')
+# Keep the historical Android identity and EAS project; only correct known stale metadata.
+for old in ['9d835e52-7b7d-4a80-83a6-b21ad88b0666','9d835e52-7b7d-4a80-83a6-b21ad88b066c','9d835e52-7b7d-4a08-83a6-b21ad88b0666']:
+    s=s.replace(old,'9d835e52-7b7d-4a08-83a6-b21ad88b066c')
+import re
+s=re.sub(r"versionCode\s*:\s*\d+",'versionCode: 61',s)
+s=re.sub(r"version\s*:\s*['\"]\d+(?:\.\d+){2}['\"]", "version: '6.0.1'", s, count=1)
+s=s.replace("./assets/icon.jpg","./assets/icon.png").replace("./assets/adaptive-icon.jpg","./assets/adaptive-icon.png").replace("./assets/splash.jpg","./assets/splash.png").replace("./assets/official-logo.jpg","./assets/official-logo.png")
+p.write_text(s,encoding='utf-8')
+PY
+          grep -q 'com.shahboun.licensing' apps/licensing-current/app.config.js
+          grep -q '9d835e52-7b7d-4a08-83a6-b21ad88b066c' apps/licensing-current/app.config.js
+          grep -q 'versionCode: 61' apps/licensing-current/app.config.js
       - uses: actions/setup-node@v4
         with:
           node-version: '20.19.4'
@@ -49,10 +110,11 @@ jobs:
         working-directory: apps/licensing-current
         shell: bash
         run: |
-          node verify-license-core.js || true
-          node verify-release.js || true
+          set -euo pipefail
+          node verify-license-core.js
+          node verify-release.js
           grep -q 'com.shahboun.licensing' app.config.js
-          grep -q '9d835e52-7b7d-4a80-83a6-b21ad88b0666' app.config.js
+          grep -q '9d835e52-7b7d-4a08-83a6-b21ad88b066c' app.config.js
           grep -q 'versionCode: 61' app.config.js
       - name: Generate Android native project
         working-directory: apps/licensing-current
@@ -75,6 +137,7 @@ jobs:
       - name: Collect and inspect APK
         shell: bash
         run: |
+          set -euo pipefail
           mkdir -p dist
           cp apps/licensing-current/android/app/build/outputs/apk/release/app-release.apk dist/Shahboun_Licensing_6.0.1.apk
           sha256sum dist/Shahboun_Licensing_6.0.1.apk > dist/Shahboun_Licensing_6.0.1.apk.sha256
