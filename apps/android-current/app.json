@@ -1,8 +1,9 @@
 {
   "expo": {
+    "owner": "ahmedshahboon",
     "name": "منظومة شهبون للمبيعات",
     "slug": "shahboun-sales",
-    "version": "6.0.0",
+    "version": "6.0.1",
     "orientation": "default",
     "icon": "./assets/images/shahboun-icon.png",
     "scheme": "shahboun-sales",
@@ -12,7 +13,7 @@
     "ios": {"supportsTablet": false},
     "android": {
       "package": "com.shahboun.sales",
-      "versionCode": 60,
+      "versionCode": 61,
       "usesCleartextTraffic": true,
       "adaptiveIcon": {"foregroundImage":"./assets/images/shahboun-icon.png","backgroundColor":"#FFFFFF"},
       "permissions": ["android.permission.CAMERA","android.permission.INTERNET","android.permission.ACCESS_NETWORK_STATE","android.permission.ACCESS_WIFI_STATE"]
@@ -25,6 +26,7 @@
       "expo-sqlite",
       "./plugins/withShahbounHost"
     ],
-    "experiments": {"typedRoutes":true,"reactCompiler":true}
+    "experiments": {"typedRoutes":true,"reactCompiler":true},
+    "extra": {"eas":{"projectId":"cad8ddae-8f8d-46d4-ae4a-3c97809b3960"}}
   }
 }
