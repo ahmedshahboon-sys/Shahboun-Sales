@@ -1,0 +1,59 @@
+name: Build Shahboun Suite 6 Android
+
+on:
+  push:
+    branches: [suite-6.0.0]
+    paths:
+      - 'apps/android-current/**'
+      - '.github/workflows/suite-6-build-android.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sales-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: apps/android-current
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20.19.0'
+          cache: npm
+          cache-dependency-path: apps/android-current/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: TypeScript check
+        run: npm run typecheck
+      - name: Generate Android native project
+        env:
+          CI: '1'
+          EXPO_NO_GIT_STATUS: '1'
+        run: npx expo prebuild --platform android --clean --no-install
+      - name: Build release APK
+        working-directory: apps/android-current/android
+        env:
+          GRADLE_OPTS: -Dorg.gradle.jvmargs=-Xmx4g -Dorg.gradle.daemon=false
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon --stacktrace
+      - name: Collect APK
+        run: |
+          mkdir -p ../../dist
+          cp android/app/build/outputs/apk/release/app-release.apk ../../dist/Shahboun_Sales_6.0.0.apk
+          sha256sum ../../dist/Shahboun_Sales_6.0.0.apk > ../../dist/Shahboun_Sales_6.0.0.apk.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Shahboun-Sales-6.0.0
+          path: |
+            dist/Shahboun_Sales_6.0.0.apk
+            dist/Shahboun_Sales_6.0.0.apk.sha256
+          retention-days: 30
