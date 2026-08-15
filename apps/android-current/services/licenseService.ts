@@ -11,8 +11,8 @@ const TRIAL_DEVICE_KEY='shahboun.sales.trial.device.v6';
 const TRIAL_MAX_SEEN_KEY='shahboun.sales.trial.maxseen.v6';
 const DEVICE_SALT='SHAHBOUN-SUITE-6-DEVICE';
 const TRIAL_MS=24*60*60*1000;
-const dec=new TextDecoder();
 const fromUrl=(s:string)=>toByteArray(s.replace(/-/g,'+').replace(/_/g,'/')+'='.repeat((4-s.length%4)%4));
+function utf8Decode(bytes:Uint8Array){let binary='';const chunk=0x8000;for(let i=0;i<bytes.length;i+=chunk){binary+=String.fromCharCode(...bytes.subarray(i,Math.min(i+chunk,bytes.length)));}return decodeURIComponent(escape(binary));}
 
 export type VerifiedLicense={version:number;licenseId:string;appId:string;deviceId:string;platform?:'android';customerName:string;storeName?:string;phone?:string;issuedAt:string;expiresAt:string|null;licenseType:string;maxDevices?:number;note?:string};
 export type TrialStatus={state:'unused'|'active'|'expired';startedAt:number|null;endsAt:number|null;remainingMs:number};
@@ -30,10 +30,10 @@ export async function verifyLicenseCode(code:string):Promise<VerifiedLicense>{
  const parts=code.trim().split('.');if(parts.length!==3||parts[0]!=='SHB1')throw new Error('INVALID_LICENSE_FORMAT');
  const payloadBytes=fromUrl(parts[1]),sig=fromUrl(parts[2]),pk=toByteArray(PUBLIC_KEY_B64);
  if(sig.length!==64||pk.length!==32||!nacl.sign.detached.verify(payloadBytes,sig,pk))throw new Error('INVALID_LICENSE_SIGNATURE');
- let p:any;try{p=JSON.parse(dec.decode(payloadBytes))}catch{throw new Error('INVALID_LICENSE_PAYLOAD')}
+ let p:any;try{p=JSON.parse(utf8Decode(payloadBytes))}catch{throw new Error('INVALID_LICENSE_PAYLOAD')}
  const deviceId=await getDeviceId();
  if(p.appId!=='com.shahboun.sales')throw new Error('WRONG_APP_LICENSE');
- // Suite 3.x/6.0 licensing codes did not include platform. Treat missing platform as Android for backward compatibility.
+ // Legacy Suite codes did not include platform. Missing platform is treated as Android for backward compatibility.
  if(p.platform&&p.platform!=='android')throw new Error('WRONG_PLATFORM_LICENSE');
  if(String(p.deviceId||'').toUpperCase()!==deviceId)throw new Error('LICENSE_DEVICE_MISMATCH');
  if(p.expiresAt&&Date.now()>Date.parse(p.expiresAt))throw new Error('LICENSE_EXPIRED');
