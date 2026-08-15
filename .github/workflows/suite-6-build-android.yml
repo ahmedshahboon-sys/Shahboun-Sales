@@ -5,6 +5,7 @@ on:
     branches: [suite-6.0.0]
     paths:
       - 'apps/android-current/**'
+      - '.ci-assets/official-logo.b64.*'
       - '.github/workflows/suite-6-build-android.yml'
   workflow_dispatch:
 
@@ -20,6 +21,13 @@ jobs:
         working-directory: apps/android-current
     steps:
       - uses: actions/checkout@v4
+      - name: Restore approved Shahboun logo
+        working-directory: .
+        shell: bash
+        run: |
+          cat .ci-assets/official-logo.b64.* | base64 -d > apps/android-current/assets/images/official-logo.jpg
+          test -s apps/android-current/assets/images/official-logo.jpg
+          sha256sum apps/android-current/assets/images/official-logo.jpg
       - uses: actions/setup-node@v4
         with:
           node-version: '20.19.4'
@@ -47,15 +55,20 @@ jobs:
         run: |
           chmod +x gradlew
           ./gradlew assembleRelease --no-daemon --stacktrace
-      - name: Collect APK
+      - name: Collect and inspect APK
         run: |
           mkdir -p ../../dist
-          cp android/app/build/outputs/apk/release/app-release.apk ../../dist/Shahboun_Sales_6.0.0.apk
-          sha256sum ../../dist/Shahboun_Sales_6.0.0.apk > ../../dist/Shahboun_Sales_6.0.0.apk.sha256
+          cp android/app/build/outputs/apk/release/app-release.apk ../../dist/Shahboun_Sales_6.0.1.apk
+          sha256sum ../../dist/Shahboun_Sales_6.0.1.apk > ../../dist/Shahboun_Sales_6.0.1.apk.sha256
+          SDKROOT="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+          APKSIGNER=$(find "$SDKROOT/build-tools" -name apksigner -type f | sort -V | tail -1 || true)
+          if [ -n "$APKSIGNER" ]; then "$APKSIGNER" verify --print-certs ../../dist/Shahboun_Sales_6.0.1.apk | tee ../../dist/Shahboun_Sales_6.0.1.signing.txt; fi
       - uses: actions/upload-artifact@v4
         with:
-          name: Shahboun-Sales-6.0.0
+          name: Shahboun-Sales-6.0.1
           path: |
-            dist/Shahboun_Sales_6.0.0.apk
-            dist/Shahboun_Sales_6.0.0.apk.sha256
+            dist/Shahboun_Sales_6.0.1.apk
+            dist/Shahboun_Sales_6.0.1.apk.sha256
+            dist/Shahboun_Sales_6.0.1.signing.txt
+          if-no-files-found: error
           retention-days: 30
