@@ -1,0 +1,24 @@
+name: Inspect Shahboun Windows Source
+on:
+  push:
+    branches: [suite-6.0.0]
+    paths: ['.github/workflows/suite-6-inspect-windows-source.yml']
+jobs:
+  inspect:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Locate and inspect bundled source
+        shell: pwsh
+        run: |
+          $zip = Get-ChildItem -Recurse -File attached_assets | Where-Object { $_.Name -like '*Complete_Source*zip' } | Select-Object -First 1
+          if (-not $zip) { throw 'Bundled source ZIP not found' }
+          New-Item -ItemType Directory -Force _inspect | Out-Null
+          Expand-Archive -LiteralPath $zip.FullName -DestinationPath _inspect -Force
+          Write-Host '=== TOP FILES ==='
+          Get-ChildItem _inspect -Recurse -File | Select-Object -First 250 | ForEach-Object { $_.FullName.Replace((Resolve-Path _inspect).Path + '\','') }
+          Write-Host '=== PACKAGE JSONS ==='
+          Get-ChildItem _inspect -Recurse -Filter package.json -File | ForEach-Object { Write-Host $_.FullName; Get-Content $_.FullName -Raw }
+          Write-Host '=== INSTALLERS ==='
+          Get-ChildItem _inspect -Recurse -Include *.iss,*SETUP*.ps1,*SETUP*.bat -File | ForEach-Object { $_.FullName }
