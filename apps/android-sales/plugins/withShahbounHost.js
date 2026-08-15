@@ -1,9 +1,9 @@
 const { withMainApplication, withDangerousMod } = require('expo/config-plugins');
 const fs=require('fs');const path=require('path');
 const IMPORT='import com.shahboun.sales.host.ShahbounHostPackage';
+function copyTree(src,dst){if(!fs.existsSync(src))return;fs.mkdirSync(dst,{recursive:true});for(const e of fs.readdirSync(src,{withFileTypes:true})){const a=path.join(src,e.name),b=path.join(dst,e.name);if(e.isDirectory())copyTree(a,b);else fs.copyFileSync(a,b)}}
 function register(config){return withMainApplication(config,cfg=>{let s=cfg.modResults.contents;if(!s.includes(IMPORT)){const a='import expo.modules.ApplicationLifecycleDispatcher';s=s.replace(a,`${IMPORT}\n\n${a}`)}if(!s.includes('add(ShahbounHostPackage())'))s=s.replace('// add(MyReactNativePackage())','// Shahboun LAN host server\n              add(ShahbounHostPackage())');cfg.modResults.contents=s;return cfg})}
 const KT=String.raw`package com.shahboun.sales.host
-
 import com.facebook.react.ReactPackage
 import com.facebook.react.bridge.*
 import com.facebook.react.modules.core.DeviceEventManagerModule
@@ -12,19 +12,9 @@ import java.io.*
 import java.net.*
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
-
-class ShahbounHostPackage:ReactPackage{
- override fun createNativeModules(c:ReactApplicationContext):List<NativeModule> = listOf(ShahbounHostModule(c))
- override fun createViewManagers(c:ReactApplicationContext):List<ViewManager<*,*>> = emptyList()
-}
-
+class ShahbounHostPackage:ReactPackage{override fun createNativeModules(c:ReactApplicationContext):List<NativeModule> = listOf(ShahbounHostModule(c));override fun createViewManagers(c:ReactApplicationContext):List<ViewManager<*,*>> = emptyList()}
 class ShahbounHostModule(private val ctx:ReactApplicationContext):ReactContextBaseJavaModule(ctx){
- private var server:ServerSocket?=null
- private val running=AtomicBoolean(false)
- private val pending=ConcurrentHashMap<String,Socket>()
- override fun getName()="ShahbounHost"
- @ReactMethod fun addListener(name:String){}
- @ReactMethod fun removeListeners(count:Int){}
+ private var server:ServerSocket?=null;private val running=AtomicBoolean(false);private val pending=ConcurrentHashMap<String,Socket>();override fun getName()="ShahbounHost";@ReactMethod fun addListener(name:String){};@ReactMethod fun removeListeners(count:Int){}
  private fun ip():String{try{val ns=NetworkInterface.getNetworkInterfaces();while(ns.hasMoreElements()){val n=ns.nextElement();if(!n.isUp||n.isLoopback)continue;val asx=n.inetAddresses;while(asx.hasMoreElements()){val a=asx.nextElement();if(a is Inet4Address&&!a.isLoopbackAddress&&a.isSiteLocalAddress)return a.hostAddress?:"127.0.0.1"}}}catch(_:Throwable){};return "127.0.0.1"}
  private fun mime(p:String)=when{p.endsWith(".html")->"text/html; charset=utf-8";p.endsWith(".js")->"application/javascript; charset=utf-8";p.endsWith(".css")->"text/css; charset=utf-8";p.endsWith(".json")->"application/json; charset=utf-8";p.endsWith(".svg")->"image/svg+xml";p.endsWith(".png")->"image/png";p.endsWith(".jpg")||p.endsWith(".jpeg")->"image/jpeg";p.endsWith(".woff2")->"font/woff2";else->"application/octet-stream"}
  private fun send(s:Socket,status:Int,type:String,body:ByteArray){try{val reason=when(status){200->"OK";201->"Created";400->"Bad Request";401->"Unauthorized";403->"Forbidden";404->"Not Found";500->"Internal Server Error";else->"OK"};val o=BufferedOutputStream(s.getOutputStream());val h="HTTP/1.1 $status $reason\r\nContent-Type: $type\r\nContent-Length: \${body.size}\r\nCache-Control: no-store\r\nConnection: close\r\nX-Shahboun-Host: 6.0.0\r\nAccess-Control-Allow-Origin: *\r\n\r\n";o.write(h.toByteArray(Charsets.UTF_8));o.write(body);o.flush()}catch(_:Throwable){}finally{try{s.close()}catch(_:Throwable){}}}
@@ -35,5 +25,5 @@ class ShahbounHostModule(private val ctx:ReactApplicationContext):ReactContextBa
  @ReactMethod fun getHostServerUrl(p:Promise){p.resolve(if(running.get())"http://\${ip()}:\${server?.localPort?:8787}" else null)}
  @ReactMethod fun respondHostRequest(id:String,status:Int,type:String,body:String,p:Promise){val s=pending.remove(id);if(s==null){p.resolve(false);return};send(s,if(status in 100..599)status else 200,if(type.isBlank())"application/json; charset=utf-8" else type,body.toByteArray(Charsets.UTF_8));p.resolve(true)}
 }`;
-function native(config){return withDangerousMod(config,['android',async cfg=>{const root=cfg.modRequest.platformProjectRoot;const dir=path.join(root,'app','src','main','java','com','shahboun','sales','host');fs.mkdirSync(dir,{recursive:true});fs.writeFileSync(path.join(dir,'ShahbounHostModule.kt'),KT,'utf8');return cfg}])}
+function native(config){return withDangerousMod(config,['android',async cfg=>{const root=cfg.modRequest.platformProjectRoot;const dir=path.join(root,'app','src','main','java','com','shahboun','sales','host');fs.mkdirSync(dir,{recursive:true});fs.writeFileSync(path.join(dir,'ShahbounHostModule.kt'),KT,'utf8');const webSrc=path.join(cfg.modRequest.projectRoot,'web');const webDst=path.join(root,'app','src','main','assets','shahboun-web');fs.rmSync(webDst,{recursive:true,force:true});copyTree(webSrc,webDst);if(!fs.existsSync(path.join(webDst,'index.html')))throw new Error('SHAHBOUN_WEB_ASSET_MISSING');return cfg}])}
 module.exports=function withShahbounHost(config){return native(register(config))};
