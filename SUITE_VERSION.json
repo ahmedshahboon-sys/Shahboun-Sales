@@ -1,12 +1,32 @@
 {
   "suite": "Shahboun Suite",
-  "version": "6.0.0",
+  "version": "6.0.1",
   "schemaVersion": 6,
   "products": {
-    "salesAndroid": "6.0.0",
-    "serverWindows": "6.0.0",
-    "web": "6.0.0",
-    "licensingAndroid": "6.0.0"
+    "salesAndroid": "6.0.1",
+    "serverWindows": "6.0.1",
+    "web": "6.0.1",
+    "licensingAndroid": "6.0.1"
+  },
+  "android": {
+    "salesApplicationId": "com.shahboun.sales",
+    "licensingApplicationId": "com.shahboun.licensing",
+    "versionCode": 61,
+    "releaseSigning": "persistent-release-keystore-required"
+  },
+  "licensing": {
+    "protocol": "SHB1",
+    "trialHours": 24,
+    "deviceBound": true
+  },
+  "branding": {
+    "logoPolicy": "official-logo-only-no-regeneration"
+  },
+  "buildPolicy": {
+    "trackedSourceOnly": true,
+    "sourceArchivesForbidden": true,
+    "debugSigningForbidden": true,
+    "buildFromCanonicalSourceOnly": true
   },
   "hostModes": ["windows", "android"],
   "clientModes": ["android-app", "web-browser"],
