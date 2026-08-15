@@ -1,0 +1,214 @@
+name: Build Shahboun Windows Setup 6.0.1
+
+on:
+  push:
+    branches:
+      - suite-6.0.0
+    paths:
+      - '.github/workflows/suite-6-build-windows.yml'
+      - '.ci-assets/windows-source-6.0.1.tgz'
+      - '.ci-assets/official-logo.b64.*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows-setup:
+    runs-on: windows-2025
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Restore repaired Windows source
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Remove-Item -Recurse -Force apps/windows-current -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force apps/windows-current | Out-Null
+          tar -xzf .ci-assets/windows-source-6.0.1.tgz -C apps/windows-current
+          if (-not (Test-Path apps/windows-current/package.json)) { throw 'Windows source restore failed' }
+
+      - name: Harden final launcher and installer run order
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $start = @'
+          @echo off
+          setlocal
+          cd /d "%~dp0"
+          if not exist .env (
+            echo Shahboun is not initialized. Running first setup...
+            powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\FIRST_RUN_SETUP.ps1"
+            if errorlevel 1 pause & exit /b 1
+          )
+          set "NODE_EXE=%~dp0runtime\node\node.exe"
+          if not exist "%NODE_EXE%" (
+            echo ERROR: Bundled Shahboun Node runtime is missing.
+            pause
+            exit /b 1
+          )
+          "%NODE_EXE%" src\server.js
+          if errorlevel 1 pause
+          '@
+          Set-Content apps/windows-current/START_SERVER.bat $start -Encoding ASCII
+
+          $iss = Get-Content apps/windows-current/installer/ShahbounServerSetup.iss
+          $iss = $iss | Where-Object { $_ -notmatch 'Filename: "\{app\}\\START_SERVER\.bat"' }
+          Set-Content apps/windows-current/installer/ShahbounServerSetup.iss $iss -Encoding UTF8
+
+      - name: Restore exact approved logo and build Windows icon
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $chunks = Get-ChildItem .ci-assets/official-logo.b64.* | Sort-Object Name
+          $b64 = ($chunks | ForEach-Object { Get-Content $_.FullName -Raw }) -join ''
+          [IO.File]::WriteAllBytes("$env:RUNNER_TEMP\approved-logo.jpg", [Convert]::FromBase64String($b64))
+          choco install imagemagick -y --no-progress
+          $magick = (Get-Command magick.exe -ErrorAction Stop).Source
+          New-Item -ItemType Directory -Force apps/windows-current/public/assets | Out-Null
+          & $magick "$env:RUNNER_TEMP\approved-logo.jpg" -auto-orient -strip "PNG32:apps/windows-current/public/assets/shahboun-logo.png"
+          & $magick "apps/windows-current/public/assets/shahboun-logo.png" -define icon:auto-resize=256,128,64,48,32,16 "apps/windows-current/installer/shahboun.ico"
+          if (-not (Test-Path apps/windows-current/installer/shahboun.ico)) { throw 'ICO generation failed' }
+
+      - name: Restore Cairo UI fonts from official Google Fonts repository
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $base = 'https://raw.githubusercontent.com/google/fonts/main/ofl/cairo/static'
+          New-Item -ItemType Directory -Force apps/windows-current/public/fonts | Out-Null
+          foreach ($name in @('Cairo-Regular.ttf','Cairo-Medium.ttf','Cairo-SemiBold.ttf','Cairo-Bold.ttf','Cairo-ExtraBold.ttf')) {
+            Invoke-WebRequest "$base/$name" -OutFile "apps/windows-current/public/fonts/$name"
+            if ((Get-Item "apps/windows-current/public/fonts/$name").Length -lt 10000) { throw "Invalid font download: $name" }
+          }
+
+      - name: Setup Node for build
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.19.4'
+          cache: npm
+          cache-dependency-path: apps/windows-current/package-lock.json
+
+      - name: Install production dependencies
+        working-directory: apps/windows-current
+        shell: pwsh
+        run: |
+          npm ci --omit=dev --no-audit --no-fund
+          if (-not (Test-Path node_modules/express)) { throw 'Production dependencies missing' }
+
+      - name: Run strict source checks
+        working-directory: apps/windows-current
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          npm run verify:syntax
+          @'
+          DB_HOST=127.0.0.1
+          DB_PORT=54329
+          DB_NAME=shahboun_lan
+          DB_USER=postgres
+          DB_PASSWORD=build_check_only
+          JWT_SECRET=build_check_only_not_for_release
+          TRIAL_HOURS=24
+          TRIAL_MAX_DEVICES=5
+          '@ | Set-Content .env -Encoding ASCII
+          npm run check:final
+          npm run acceptance
+          Remove-Item .env -Force
+
+      - name: Validate PowerShell installer scripts
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          foreach ($file in @(
+            'apps/windows-current/scripts/BOOTSTRAP_PREREQUISITES.ps1',
+            'apps/windows-current/scripts/FIRST_RUN_SETUP.ps1',
+            'apps/windows-current/scripts/INSTALL_SERVER_AUTOSTART.ps1'
+          )) {
+            $tokens = $null; $errors = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $file), [ref]$tokens, [ref]$errors)
+            if ($errors.Count -gt 0) { $errors | Format-List | Out-String | Write-Error; throw "PowerShell syntax failed: $file" }
+          }
+
+      - name: Bundle Node 20.19.4 runtime
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $url = 'https://nodejs.org/dist/v20.19.4/node-v20.19.4-win-x64.zip'
+          Invoke-WebRequest $url -OutFile "$env:RUNNER_TEMP\node.zip"
+          Expand-Archive "$env:RUNNER_TEMP\node.zip" "$env:RUNNER_TEMP\node" -Force
+          Remove-Item -Recurse -Force apps/windows-current/runtime/node -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force apps/windows-current/runtime/node | Out-Null
+          Copy-Item "$env:RUNNER_TEMP\node\node-v20.19.4-win-x64\*" apps/windows-current/runtime/node -Recurse -Force
+          & apps/windows-current/runtime/node/node.exe --version
+
+      - name: Bundle PostgreSQL 17.11 installer
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Force apps/windows-current/runtime | Out-Null
+          $dest = 'apps/windows-current/runtime/postgresql-17.11-1-windows-x64.exe'
+          $urls = @(
+            'https://get.enterprisedb.com/postgresql/postgresql-17.11-1-windows-x64.exe',
+            'https://sbp.enterprisedb.com/getfile.jsp?fileid=1259878'
+          )
+          $ok = $false
+          foreach ($url in $urls) {
+            try {
+              Invoke-WebRequest $url -OutFile $dest -MaximumRedirection 10
+              if ((Get-Item $dest).Length -gt 100MB) { $ok = $true; break }
+            } catch { Write-Host "Download candidate failed: $url" }
+          }
+          if (-not $ok) { throw 'Unable to obtain official PostgreSQL 17.11 Windows installer' }
+          Get-FileHash $dest -Algorithm SHA256 | Format-List
+
+      - name: Verify final offline payload
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $required = @(
+            'apps/windows-current/runtime/node/node.exe',
+            'apps/windows-current/runtime/postgresql-17.11-1-windows-x64.exe',
+            'apps/windows-current/node_modules/express/package.json',
+            'apps/windows-current/installer/shahboun.ico',
+            'apps/windows-current/public/assets/shahboun-logo.png'
+          )
+          foreach ($p in $required) { if (-not (Test-Path $p)) { throw "Missing final payload: $p" } }
+          if (Test-Path apps/windows-current/.env) { throw '.env must never be shipped in installer' }
+
+      - name: Compile Setup.exe with Inno Setup
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          choco install innosetup -y --no-progress
+          New-Item -ItemType Directory -Force apps/windows-current/installer/Output | Out-Null
+          $iscc = @(
+            "$env:ProgramFiles(x86)\Inno Setup 6\ISCC.exe",
+            "$env:ProgramFiles\Inno Setup 6\ISCC.exe"
+          ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $iscc) { throw 'ISCC.exe not found' }
+          Push-Location apps/windows-current/installer
+          & $iscc 'ShahbounServerSetup.iss'
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed: $LASTEXITCODE" }
+          Pop-Location
+          $setup = 'apps/windows-current/installer/Output/Shahboun_Server_Setup_6.0.1.exe'
+          if (-not (Test-Path $setup)) { throw 'Setup.exe was not created' }
+          if ((Get-Item $setup).Length -lt 100MB) { throw 'Setup.exe is unexpectedly small; offline payload likely missing' }
+
+      - name: Package Windows artifact
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Copy-Item apps/windows-current/installer/Output/Shahboun_Server_Setup_6.0.1.exe dist/Shahboun_Server_Setup_6.0.1.exe
+          $hash = (Get-FileHash dist/Shahboun_Server_Setup_6.0.1.exe -Algorithm SHA256).Hash.ToLower()
+          "$hash  Shahboun_Server_Setup_6.0.1.exe" | Set-Content dist/Shahboun_Server_Setup_6.0.1.exe.sha256 -Encoding ASCII
+
+      - name: Upload Windows Setup
+        uses: actions/upload-artifact@v4
+        with:
+          name: Shahboun-Windows-Setup-6.0.1
+          path: dist/
+          if-no-files-found: error
+          retention-days: 30
