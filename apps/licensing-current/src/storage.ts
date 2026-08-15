@@ -1,0 +1,7 @@
+import * as SQLite from 'expo-sqlite';
+export type RecordItem={id:string;createdAt:string;customerName:string;phone:string;deviceId:string;code:string;expiresAt:string|null;licenseType?:'trial'|'licensed';note?:string};const dbp=SQLite.openDatabaseAsync('shahboun_licensing.db');
+async function init(){const d=await dbp;await d.execAsync('CREATE TABLE IF NOT EXISTS licenses (id TEXT PRIMARY KEY NOT NULL, json TEXT NOT NULL);')}
+export async function list():Promise<RecordItem[]>{await init();const d=await dbp;const rows=await d.getAllAsync<{json:string}>('SELECT json FROM licenses');return rows.map(r=>JSON.parse(r.json)).sort((a,b)=>b.createdAt.localeCompare(a.createdAt))}
+export async function save(x:RecordItem){await init();const d=await dbp;await d.runAsync('INSERT OR REPLACE INTO licenses(id,json) VALUES(?,?)',x.id,JSON.stringify(x))}
+export async function exportHistory(){return JSON.stringify({format:'SHAHBOUN-LICENSING-HISTORY-1',version:1,rows:await list()},null,2)}
+export async function importHistory(text:string){const raw=JSON.parse(text);if(raw?.format!=='SHAHBOUN-LICENSING-HISTORY-1'||!Array.isArray(raw.rows))throw new Error('INVALID_HISTORY_BACKUP');await init();const d=await dbp;await d.withExclusiveTransactionAsync(async t=>{for(const r of raw.rows){if(!r?.id||!r?.deviceId||!r?.code)throw new Error('INVALID_HISTORY_BACKUP');await t.runAsync('INSERT OR REPLACE INTO licenses(id,json) VALUES(?,?)',r.id,JSON.stringify(r))}});return list()}
