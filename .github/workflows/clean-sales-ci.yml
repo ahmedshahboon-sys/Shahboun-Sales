@@ -1,0 +1,75 @@
+name: Clean Shahboun Sales 6.0.1 CI
+
+on:
+  push:
+    branches: [suite-6.0.1-clean]
+    paths:
+      - 'apps/android-current/**'
+      - '.github/workflows/clean-sales-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20.19.4'
+          cache: npm
+          cache-dependency-path: apps/android-current/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Verify canonical identity and branding
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq '"package": "com.shahboun.sales"' apps/android-current/app.json
+          grep -Fq '"version": "6.0.1"' apps/android-current/app.json
+          grep -Fq '"versionCode": 61' apps/android-current/app.json
+          grep -Fq 'cad8ddae-8f8d-46d4-ae4a-3c97809b3960' apps/android-current/app.json
+          test -s apps/android-current/assets/images/official-logo.png
+      - name: Install dependencies
+        working-directory: apps/android-current
+        run: npm ci --no-audit --no-fund
+      - name: TypeScript
+        working-directory: apps/android-current
+        run: npm run typecheck
+      - name: Generate Android native project
+        working-directory: apps/android-current
+        env:
+          CI: '1'
+          EXPO_NO_GIT_STATUS: '1'
+        run: npx expo prebuild --platform android --clean --no-install
+      - name: Verify generated Android identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -R "applicationId.*com.shahboun.sales" apps/android-current/android/app/build.gradle
+      - name: Build installable CI APK
+        working-directory: apps/android-current/android
+        env:
+          NODE_ENV: production
+          GRADLE_OPTS: -Dorg.gradle.jvmargs=-Xmx4g -Dorg.gradle.daemon=false
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon --stacktrace
+      - name: Package CI result
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp apps/android-current/android/app/build/outputs/apk/debug/app-debug.apk dist/Shahboun_Sales_6.0.1_CI.apk
+          sha256sum dist/Shahboun_Sales_6.0.1_CI.apk > dist/Shahboun_Sales_6.0.1_CI.apk.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Shahboun-Sales-6.0.1-CI
+          path: dist/
+          if-no-files-found: error
+          retention-days: 14
