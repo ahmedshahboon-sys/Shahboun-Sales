@@ -1,0 +1,17 @@
+{
+  "suite": "Shahboun Suite",
+  "version": "6.0.0",
+  "schemaVersion": 6,
+  "products": {
+    "salesAndroid": "6.0.0",
+    "serverWindows": "6.0.0",
+    "web": "6.0.0",
+    "licensingAndroid": "6.0.0"
+  },
+  "hostModes": ["windows", "android"],
+  "clientModes": ["android-app", "web-browser"],
+  "iosMode": "web-client-only",
+  "macMode": "web-client-only",
+  "languages": ["ar", "en"],
+  "defaultLanguage": "ar"
+}
