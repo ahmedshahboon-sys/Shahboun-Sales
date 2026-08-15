@@ -27,7 +27,7 @@ jobs:
           $ErrorActionPreference = 'Stop'
           Remove-Item -Recurse -Force apps/windows-current -ErrorAction SilentlyContinue
           New-Item -ItemType Directory -Force apps/windows-current | Out-Null
-          tar -xzf .ci-assets/windows-source-6.0.1.tgz -C apps/windows-current
+          tar -xzf .ci-assets/windows-source-6.0.1.tgz -C apps/windows-current --strip-components=1
           if (-not (Test-Path apps/windows-current/package.json)) { throw 'Windows source restore failed' }
 
       - name: Harden final launcher and installer run order
