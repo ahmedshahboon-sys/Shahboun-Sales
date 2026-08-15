@@ -6,7 +6,7 @@ on:
       - suite-6.0.0
     paths:
       - '.github/workflows/suite-6-build-licensing-v2.yml'
-      - '.ci-assets/licensing-src-6.0.1-good.b64'
+      - '.ci-assets/licensing-source-6.0.1.tgz'
       - '.ci-assets/official-logo.b64.*'
   workflow_dispatch:
 
@@ -27,7 +27,7 @@ jobs:
           set -euo pipefail
           rm -rf apps/licensing-current
           mkdir -p apps/licensing-current
-          base64 -d .ci-assets/licensing-src-6.0.1-good.b64 > /tmp/licensing.tgz
+          cp .ci-assets/licensing-source-6.0.1.tgz /tmp/licensing.tgz
           gzip -t /tmp/licensing.tgz
           tar -xzf /tmp/licensing.tgz -C apps/licensing-current
           test -f apps/licensing-current/App.tsx
