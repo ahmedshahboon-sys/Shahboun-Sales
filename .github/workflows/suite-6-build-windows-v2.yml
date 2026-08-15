@@ -1,0 +1,138 @@
+name: Build Shahboun Windows Setup 6.0.1 V2
+
+on:
+  push:
+    branches: [suite-6.0.0]
+    paths:
+      - '.github/workflows/suite-6-build-windows-v2.yml'
+      - '.ci-assets/windows-source-6.0.1.tgz'
+      - '.ci-assets/official-logo.b64.*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-2025
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore source robustly
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          Remove-Item -Recurse -Force apps/windows-current,$env:RUNNER_TEMP\shbwin -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force apps/windows-current,$env:RUNNER_TEMP\shbwin | Out-Null
+          tar -xzf .ci-assets/windows-source-6.0.1.tgz -C "$env:RUNNER_TEMP\shbwin"
+          $root=Join-Path $env:RUNNER_TEMP 'shbwin\Shahboun_Server_Web_Windows'
+          if(-not(Test-Path "$root\package.json")){throw 'Source archive structure invalid'}
+          Get-ChildItem $root -Force | Copy-Item -Destination apps/windows-current -Recurse -Force
+          if(-not(Test-Path apps/windows-current/package.json)){throw 'Source copy failed'}
+      - name: Prepare approved brand
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $b64=((Get-ChildItem .ci-assets/official-logo.b64.*|Sort-Object Name|%{Get-Content $_.FullName -Raw})-join '')
+          [IO.File]::WriteAllBytes("$env:RUNNER_TEMP\logo.jpg",[Convert]::FromBase64String($b64))
+          choco install imagemagick -y --no-progress
+          $m=(Get-Command magick.exe).Source
+          New-Item -ItemType Directory -Force apps/windows-current/public/assets | Out-Null
+          & $m "$env:RUNNER_TEMP\logo.jpg" -auto-orient -strip "PNG32:apps/windows-current/public/assets/shahboun-logo.png"
+          & $m apps/windows-current/public/assets/shahboun-logo.png -define icon:auto-resize=256,128,64,48,32,16 apps/windows-current/installer/shahboun.ico
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20.19.4'
+      - name: Install and test source
+        working-directory: apps/windows-current
+        shell: pwsh
+        run: |
+          npm ci --no-audit --no-fund
+          npm run verify:syntax
+          @'
+          DB_HOST=127.0.0.1
+          DB_PORT=54329
+          DB_NAME=shahboun_lan
+          DB_USER=postgres
+          DB_PASSWORD=build_check_only
+          JWT_SECRET=build_check_only
+          TRIAL_HOURS=24
+          TRIAL_MAX_DEVICES=5
+          '@ | Set-Content .env -Encoding ASCII
+          npm run check:final
+          npm run acceptance
+          Remove-Item .env -Force
+      - name: Verify installer scripts
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          foreach($f in @('BOOTSTRAP_PREREQUISITES.ps1','FIRST_RUN_SETUP.ps1','INSTALL_SERVER_AUTOSTART.ps1')){
+            $t=$null;$e=$null
+            [void][Management.Automation.Language.Parser]::ParseFile((Resolve-Path "apps/windows-current/scripts/$f"),[ref]$t,[ref]$e)
+            if($e.Count){$e|Out-String|Write-Error;throw "Syntax error $f"}
+          }
+      - name: Keep production dependencies only
+        working-directory: apps/windows-current
+        run: npm prune --omit=dev
+      - name: Bundle Node runtime
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          Invoke-WebRequest https://nodejs.org/dist/v20.19.4/node-v20.19.4-win-x64.zip -OutFile "$env:RUNNER_TEMP\node.zip"
+          Expand-Archive "$env:RUNNER_TEMP\node.zip" "$env:RUNNER_TEMP\node" -Force
+          New-Item -ItemType Directory -Force apps/windows-current/runtime/node | Out-Null
+          Copy-Item "$env:RUNNER_TEMP\node\node-v20.19.4-win-x64\*" apps/windows-current/runtime/node -Recurse -Force
+          & apps/windows-current/runtime/node/node.exe --version
+      - name: Bundle PostgreSQL installer
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          New-Item -ItemType Directory -Force apps/windows-current/runtime | Out-Null
+          $dest='apps/windows-current/runtime/postgresql-17.11-1-windows-x64.exe'
+          Invoke-WebRequest 'https://get.enterprisedb.com/postgresql/postgresql-17.11-1-windows-x64.exe' -OutFile $dest -MaximumRedirection 10
+          if((Get-Item $dest).Length -lt 100MB){throw 'PostgreSQL installer invalid'}
+      - name: Harden launcher and prevent duplicate start
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          @'
+          @echo off
+          setlocal
+          cd /d "%~dp0"
+          if not exist .env (
+            powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\FIRST_RUN_SETUP.ps1"
+            if errorlevel 1 pause & exit /b 1
+          )
+          set "NODE_EXE=%~dp0runtime\node\node.exe"
+          if not exist "%NODE_EXE%" echo ERROR: bundled runtime missing & pause & exit /b 1
+          "%NODE_EXE%" src\server.js
+          if errorlevel 1 pause
+          '@ | Set-Content apps/windows-current/START_SERVER.bat -Encoding ASCII
+          $iss=Get-Content apps/windows-current/installer/ShahbounServerSetup.iss
+          $iss=$iss|?{$_ -notmatch 'Filename: "\{app\}\\START_SERVER\.bat"'}
+          Set-Content apps/windows-current/installer/ShahbounServerSetup.iss $iss -Encoding UTF8
+          if(Test-Path apps/windows-current/.env){throw '.env must not ship'}
+      - name: Compile Setup
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          choco install innosetup -y --no-progress
+          $iscc=@("${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe","$env:ProgramFiles\Inno Setup 6\ISCC.exe")|?{Test-Path $_}|select -First 1
+          if(-not $iscc){throw 'ISCC missing'}
+          Push-Location apps/windows-current/installer
+          & $iscc ShahbounServerSetup.iss
+          if($LASTEXITCODE){throw 'Inno build failed'}
+          Pop-Location
+          $setup='apps/windows-current/installer/Output/Shahboun_Server_Setup_6.0.1.exe'
+          if(-not(Test-Path $setup)){throw 'Setup not produced'}
+          if((Get-Item $setup).Length -lt 100MB){throw 'Setup payload incomplete'}
+          New-Item -ItemType Directory -Force dist|Out-Null
+          Copy-Item $setup dist/
+          $h=(Get-FileHash $setup -Algorithm SHA256).Hash.ToLower()
+          "$h  Shahboun_Server_Setup_6.0.1.exe"|Set-Content dist/Shahboun_Server_Setup_6.0.1.exe.sha256 -Encoding ASCII
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Shahboun-Windows-Setup-6.0.1
+          path: dist/
+          if-no-files-found: error
+          retention-days: 30
