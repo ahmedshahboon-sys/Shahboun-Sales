@@ -5,6 +5,7 @@ import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { HostBridge } from '@/components/HostBridge';
+import { SuiteModeGate } from '@/components/SuiteModeGate';
 import {
   Inter_400Regular,
   Inter_500Medium,
@@ -27,34 +28,13 @@ function RootLayoutNav() {
   );
 }
 
+function LocalHostApp(){
+ return <AppProvider><HostBridge/><GestureHandlerRootView style={{flex:1}}><KeyboardProvider><RootLayoutNav/></KeyboardProvider></GestureHandlerRootView></AppProvider>
+}
+
 export default function RootLayout() {
-  const [fontsLoaded, fontError] = useFonts({
-    Inter_400Regular,
-    Inter_500Medium,
-    Inter_600SemiBold,
-    Inter_700Bold,
-  });
-
-  useEffect(() => {
-    if (fontsLoaded || fontError) SplashScreen.hideAsync();
-  }, [fontsLoaded, fontError]);
-
+  const [fontsLoaded, fontError] = useFonts({Inter_400Regular,Inter_500Medium,Inter_600SemiBold,Inter_700Bold});
+  useEffect(() => { if (fontsLoaded || fontError) SplashScreen.hideAsync(); }, [fontsLoaded, fontError]);
   if (!fontsLoaded && !fontError) return null;
-
-  return (
-    <SafeAreaProvider>
-      <ErrorBoundary>
-        <QueryClientProvider client={queryClient}>
-          <AppProvider>
-            <HostBridge />
-            <GestureHandlerRootView style={{ flex: 1 }}>
-              <KeyboardProvider>
-                <RootLayoutNav />
-              </KeyboardProvider>
-            </GestureHandlerRootView>
-          </AppProvider>
-        </QueryClientProvider>
-      </ErrorBoundary>
-    </SafeAreaProvider>
-  );
+  return <SafeAreaProvider><ErrorBoundary><QueryClientProvider client={queryClient}><SuiteModeGate><LocalHostApp/></SuiteModeGate></QueryClientProvider></ErrorBoundary></SafeAreaProvider>;
 }
