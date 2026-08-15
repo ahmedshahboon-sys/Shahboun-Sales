@@ -21,13 +21,20 @@ jobs:
         working-directory: apps/android-current
     steps:
       - uses: actions/checkout@v4
-      - name: Restore approved Shahboun logo
+      - name: Restore approved Shahboun logo as safe PNG
         working-directory: .
         shell: bash
         run: |
-          cat .ci-assets/official-logo.b64.* | base64 -d > apps/android-current/assets/images/official-logo.jpg
-          test -s apps/android-current/assets/images/official-logo.jpg
-          sha256sum apps/android-current/assets/images/official-logo.jpg
+          set -euo pipefail
+          cat .ci-assets/official-logo.b64.* | base64 -d > /tmp/official-logo-source.jpg
+          test -s /tmp/official-logo-source.jpg
+          file /tmp/official-logo-source.jpg
+          sudo apt-get update -y >/dev/null
+          sudo apt-get install -y imagemagick >/dev/null
+          convert /tmp/official-logo-source.jpg -auto-orient -strip PNG32:apps/android-current/assets/images/official-logo.png
+          test -s apps/android-current/assets/images/official-logo.png
+          identify apps/android-current/assets/images/official-logo.png
+          sha256sum /tmp/official-logo-source.jpg apps/android-current/assets/images/official-logo.png
       - uses: actions/setup-node@v4
         with:
           node-version: '20.19.4'
@@ -57,6 +64,7 @@ jobs:
           ./gradlew assembleRelease --no-daemon --stacktrace
       - name: Collect and inspect APK
         run: |
+          set -euo pipefail
           mkdir -p ../../dist
           cp android/app/build/outputs/apk/release/app-release.apk ../../dist/Shahboun_Sales_6.0.1.apk
           sha256sum ../../dist/Shahboun_Sales_6.0.1.apk > ../../dist/Shahboun_Sales_6.0.1.apk.sha256
