@@ -2,11 +2,10 @@ name: Build Shahboun Licensing 6.0.1 V2
 
 on:
   push:
-    branches:
-      - suite-6.0.0
+    branches: [suite-6.0.0]
     paths:
       - '.github/workflows/suite-6-build-licensing-v2.yml'
-      - '.ci-assets/licensing-source-6.0.1.tgz'
+      - '.ci-assets/licensing-src-fixed.*'
       - '.ci-assets/official-logo.b64.*'
   workflow_dispatch:
 
@@ -18,22 +17,21 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Restore licensing source
+      - uses: actions/checkout@v4
+      - name: Restore verified Licensing source
         shell: bash
         run: |
           set -euo pipefail
           rm -rf apps/licensing-current
           mkdir -p apps/licensing-current
-          cp .ci-assets/licensing-source-6.0.1.tgz /tmp/licensing.tgz
+          cat .ci-assets/licensing-src-fixed.0* | base64 -d > /tmp/licensing.tgz
+          test "$(stat -c%s /tmp/licensing.tgz)" -eq 15780
+          echo '37ae37569e7d5855666e1fc97fdc42b0da605e5697a5054b7c15a44aa0eeb50  /tmp/licensing.tgz' | sha256sum -c -
           gzip -t /tmp/licensing.tgz
           tar -xzf /tmp/licensing.tgz -C apps/licensing-current
-          test -f apps/licensing-current/App.tsx
-          test -f apps/licensing-current/app.config.js
-
-      - name: Prepare exact approved logo
+          test -s apps/licensing-current/App.tsx
+          test -s apps/licensing-current/app.config.js
+      - name: Restore exact approved logo as safe PNG
         shell: bash
         run: |
           set -euo pipefail
@@ -45,8 +43,7 @@ jobs:
           cp apps/licensing-current/assets/official-logo.png apps/licensing-current/assets/icon.png
           cp apps/licensing-current/assets/official-logo.png apps/licensing-current/assets/adaptive-icon.png
           cp apps/licensing-current/assets/official-logo.png apps/licensing-current/assets/splash.png
-
-      - name: Pin historical identity and release metadata
+      - name: Pin release metadata without changing app identity
         shell: bash
         run: |
           set -euo pipefail
@@ -54,44 +51,36 @@ jobs:
           sed -i "s/version: '6.0.0'/version: '6.0.1'/g" apps/licensing-current/app.config.js
           sed -i -E 's/versionCode: [0-9]+/versionCode: 61/g' apps/licensing-current/app.config.js
           sed -i 's/newArchEnabled: false/newArchEnabled: true/g' apps/licensing-current/app.config.js
-          sed -i 's#./assets/icon.jpg#./assets/icon.png#g' apps/licensing-current/app.config.js
-          sed -i 's#./assets/adaptive-icon.jpg#./assets/adaptive-icon.png#g' apps/licensing-current/app.config.js
-          sed -i 's#./assets/splash.jpg#./assets/splash.png#g' apps/licensing-current/app.config.js
-          grep -Fq 'com.shahboun.licensing' apps/licensing-current/app.config.js
-          grep -Fq '9d835e52-7b7d-4a08-83a6-b21ad88b066c' apps/licensing-current/app.config.js
-          grep -Fq 'versionCode: 61' apps/licensing-current/app.config.js
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
+          sed -i 's#./assets/icon.jpg#./assets/icon.png#g; s#./assets/adaptive-icon.jpg#./assets/adaptive-icon.png#g; s#./assets/splash.jpg#./assets/splash.png#g; s#./assets/official-logo.jpg#./assets/official-logo.png#g' apps/licensing-current/app.config.js
+          sed -i 's#./assets/icon.jpg#./assets/icon.png#g; s#./assets/official-logo.jpg#./assets/official-logo.png#g' apps/licensing-current/App.tsx
+          sed -i "s/version: '6.0.0'/version: '6.0.1'/g" apps/licensing-current/src/brand.ts
+          cd apps/licensing-current && npm pkg set version=6.0.1
+          grep -Fq 'com.shahboun.licensing' app.config.js
+          grep -Fq '9d835e52-7b7d-4a08-83a6-b21ad88b066c' app.config.js
+          grep -Fq 'versionCode: 61' app.config.js
+      - uses: actions/setup-node@v4
         with:
           node-version: '20.19.4'
-
-      - name: Setup Java
-        uses: actions/setup-java@v4
+      - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
-
       - name: Install dependencies
         working-directory: apps/licensing-current
         run: npm install --no-audit --no-fund
-
       - name: TypeScript check
         working-directory: apps/licensing-current
         run: npm run typecheck
-
       - name: Expo prebuild
         working-directory: apps/licensing-current
         env:
           CI: '1'
           EXPO_NO_GIT_STATUS: '1'
         run: npx expo prebuild --platform android --clean --no-install
-
-      - name: Verify native identity
+      - name: Verify generated native identity
         working-directory: apps/licensing-current
         run: node verify-native.cjs
-
-      - name: Build APK
+      - name: Build release APK
         working-directory: apps/licensing-current/android
         env:
           NODE_ENV: production
@@ -100,8 +89,7 @@ jobs:
           printf '\nreactNativeArchitectures=arm64-v8a,armeabi-v7a\nandroid.enableMinifyInReleaseBuilds=true\nandroid.enableShrinkResourcesInReleaseBuilds=true\n' >> gradle.properties
           chmod +x gradlew
           ./gradlew assembleRelease --no-daemon --stacktrace
-
-      - name: Package result
+      - name: Package and verify APK
         shell: bash
         run: |
           set -euo pipefail
@@ -110,9 +98,7 @@ jobs:
           sha256sum dist/Shahboun_Licensing_6.0.1.apk > dist/Shahboun_Licensing_6.0.1.apk.sha256
           APKSIGNER=$(find "${ANDROID_HOME}/build-tools" -type f -name apksigner | sort -V | tail -1)
           "$APKSIGNER" verify --print-certs dist/Shahboun_Licensing_6.0.1.apk > dist/Shahboun_Licensing_6.0.1.signing.txt
-
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: Shahboun-Licensing-6.0.1
           path: dist/
