@@ -1,0 +1,31 @@
+name: Shahboun Suite EAS Credential Check
+on:
+  push:
+    branches: [suite-6.0.0]
+    paths:
+      - '.github/workflows/suite-6-eas-auth-check.yml'
+      - 'apps/android-current/app.json'
+jobs:
+  eas-auth:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Check EXPO_TOKEN availability
+        shell: bash
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          if [ -z "$EXPO_TOKEN" ]; then
+            echo "EXPO_TOKEN_MISSING"
+            exit 2
+          fi
+          npx --yes eas-cli@latest account:view --non-interactive
+      - name: Verify historical Sales EAS project
+        working-directory: apps/android-current
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: npx --yes eas-cli@latest project:info --non-interactive
