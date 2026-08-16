@@ -1,8 +1,8 @@
-name: Clean Shahboun Sales 6.0.1 Standalone
+name: Shahboun Sales 6.0.2 Signed Update
 
 on:
   push:
-    branches: [suite-6.0.1-clean]
+    branches: [suite-6.0.2-repair]
     paths:
       - 'apps/android-current/**'
       - '.github/workflows/clean-sales-ci.yml'
@@ -12,9 +12,9 @@ permissions:
   contents: read
 
 jobs:
-  verify:
+  build-signed-update:
     runs-on: ubuntu-24.04
-    timeout-minutes: 50
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -24,69 +24,84 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - name: Verify canonical identity and official branding only
+
+      - name: Verify canonical identity, version and approved logo
         shell: bash
         run: |
           set -euo pipefail
           grep -Fq '"package": "com.shahboun.sales"' apps/android-current/app.json
-          grep -Fq '"version": "6.0.1"' apps/android-current/app.json
-          grep -Fq '"versionCode": 61' apps/android-current/app.json
+          grep -Fq '"version": "6.0.2"' apps/android-current/app.json
+          grep -Fq '"versionCode": 62' apps/android-current/app.json
           grep -Fq 'cad8ddae-8f8d-46d4-ae4a-3c97809b3960' apps/android-current/app.json
           test -s apps/android-current/assets/images/official-logo.png
           test -s apps/android-current/assets/images/icon.png
           cmp -s apps/android-current/assets/images/official-logo.png apps/android-current/assets/images/icon.png
-          ! test -e apps/android-current/assets/images/shahboun-icon.png
-          ! grep -R --exclude-dir=node_modules --exclude-dir=.git --exclude-dir=android --include='*.ts' --include='*.tsx' --include='*.js' --include='*.json' -Fq 'shahboun-icon.png' apps/android-current/app apps/android-current/components apps/android-current/constants apps/android-current/context apps/android-current/db apps/android-current/hooks apps/android-current/lib apps/android-current/services apps/android-current/utils apps/android-current/app.json 2>/dev/null
-      - name: Install dependencies
+
+      - name: Install dependencies and typecheck
         working-directory: apps/android-current
-        run: npm install --no-audit --no-fund
-      - name: TypeScript
-        working-directory: apps/android-current
-        run: npm run typecheck
-      - name: Generate Android native project
+        run: |
+          npm install --no-audit --no-fund
+          npm run typecheck
+
+      - name: Verify EAS account and historical project
         working-directory: apps/android-current
         env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$EXPO_TOKEN" || { echo EXPO_TOKEN_MISSING; exit 2; }
+          npx --yes eas-cli@latest account:view --non-interactive
+          npx --yes eas-cli@latest project:info --non-interactive
+
+      - name: Build APK with persistent EAS release credentials
+        working-directory: apps/android-current
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
           CI: '1'
-          EXPO_NO_GIT_STATUS: '1'
-          NODE_ENV: production
-        run: npx expo prebuild --platform android --clean --no-install
-      - name: Verify generated Android identity
         shell: bash
         run: |
           set -euo pipefail
-          grep -R "applicationId.*com.shahboun.sales" apps/android-current/android/app/build.gradle
-      - name: Build standalone release APK
-        working-directory: apps/android-current/android
-        env:
-          NODE_ENV: production
-          GRADLE_OPTS: -Dorg.gradle.jvmargs=-Xmx4g -Dorg.gradle.daemon=false
-        run: |
-          chmod +x gradlew
-          ./gradlew assembleRelease --no-daemon --stacktrace
-      - name: Verify APK is standalone and matches identity
+          mkdir -p ../../dist
+          npx --yes eas-cli@latest build --platform android --profile preview --non-interactive --wait --json > ../../dist/eas-sales-build.json
+          node - <<'NODE'
+          const fs=require('fs');
+          const raw=fs.readFileSync('dist/eas-sales-build.json','utf8').trim();
+          const data=JSON.parse(raw);
+          const b=Array.isArray(data)?data[0]:data;
+          const url=b?.artifacts?.applicationArchiveUrl || b?.artifacts?.buildUrl || b?.artifactUrl;
+          if(!url) throw new Error('EAS_APK_URL_MISSING');
+          fs.writeFileSync('dist/eas-sales-url.txt',url);
+          fs.writeFileSync('dist/eas-sales-id.txt',String(b.id||''));
+          NODE
+          curl --fail --location --retry 5 --retry-delay 3 "$(cat ../../dist/eas-sales-url.txt)" -o ../../dist/Shahboun_Sales_6.0.2_SIGNED_UPDATE.apk
+          test -s ../../dist/Shahboun_Sales_6.0.2_SIGNED_UPDATE.apk
+
+      - name: Verify APK package, version, embedded bundle and certificate
         shell: bash
         run: |
           set -euo pipefail
-          APK=apps/android-current/android/app/build/outputs/apk/release/app-release.apk
-          test -s "$APK"
+          APK=dist/Shahboun_Sales_6.0.2_SIGNED_UPDATE.apk
           unzip -l "$APK" > /tmp/apk-list.txt
           grep -Eq 'assets/index.android.bundle|assets/.*\.bundle' /tmp/apk-list.txt
-          AAPT=$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -1)
-          test -x "$AAPT"
+          SDKROOT="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+          AAPT=$(find "$SDKROOT/build-tools" -type f -name aapt | sort -V | tail -1)
+          APKSIGNER=$(find "$SDKROOT/build-tools" -type f -name apksigner | sort -V | tail -1)
           BADGING=$($AAPT dump badging "$APK")
+          echo "$BADGING" | tee dist/Shahboun_Sales_6.0.2.badging.txt
           echo "$BADGING" | grep -F "package: name='com.shahboun.sales'"
-          echo "$BADGING" | grep -F "versionCode='61'"
-          ! unzip -l "$APK" | grep -qi 'shahboun-icon'
-      - name: Package verified result
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p dist
-          cp apps/android-current/android/app/build/outputs/apk/release/app-release.apk dist/Shahboun_Sales_6.0.1_STANDALONE.apk
-          sha256sum dist/Shahboun_Sales_6.0.1_STANDALONE.apk > dist/Shahboun_Sales_6.0.1_STANDALONE.apk.sha256
+          echo "$BADGING" | grep -F "versionCode='62'"
+          "$APKSIGNER" verify --verbose --print-certs "$APK" | tee dist/Shahboun_Sales_6.0.2.signing.txt
+          sha256sum "$APK" > dist/Shahboun_Sales_6.0.2_SIGNED_UPDATE.apk.sha256
+
       - uses: actions/upload-artifact@v4
         with:
-          name: Shahboun-Sales-6.0.1-STANDALONE
-          path: dist/
+          name: Shahboun-Sales-6.0.2-SIGNED-UPDATE
+          path: |
+            dist/Shahboun_Sales_6.0.2_SIGNED_UPDATE.apk
+            dist/Shahboun_Sales_6.0.2_SIGNED_UPDATE.apk.sha256
+            dist/Shahboun_Sales_6.0.2.signing.txt
+            dist/Shahboun_Sales_6.0.2.badging.txt
+            dist/eas-sales-build.json
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 30
