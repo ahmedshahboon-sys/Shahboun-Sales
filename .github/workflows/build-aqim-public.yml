@@ -28,17 +28,21 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.11.1'
+      - name: Add CC0 default adhan audio
+        run: |
+          mkdir -p AqimBuild/app/src/main/res/raw
+          curl -L --fail --retry 3 "https://upload.wikimedia.org/wikipedia/commons/a/a9/Muslim_calling_to_prayer.ogg" -o AqimBuild/app/src/main/res/raw/adhan_default.ogg
       - name: Build unsigned release APK
         working-directory: AqimBuild
         run: gradle --no-daemon :app:assembleRelease
       - name: Prepare APK
         run: |
           mkdir -p output
-          cp AqimBuild/app/build/outputs/apk/release/app-release-unsigned.apk output/AQIM-v1.0.0-unsigned.apk
+          cp AqimBuild/app/build/outputs/apk/release/app-release-unsigned.apk output/AQIM-v1.1.0-unsigned.apk
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: AQIM-v1.0.0-unsigned
-          path: output/AQIM-v1.0.0-unsigned.apk
+          name: AQIM-v1.1.0-unsigned
+          path: output/AQIM-v1.1.0-unsigned.apk
           if-no-files-found: error
           retention-days: 30
