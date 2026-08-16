@@ -35,7 +35,7 @@ jobs:
             assert isinstance(d,list) and len(d)>6000
             assert {int(x.get('sura_no',x.get('sora',0))) for x in d}==set(range(1,115))
           PY
-      - name: Patch 1.5.0 routing timezone permissions muezzins time and iqama
+      - name: Patch AQIM 1.5.0 runtime UI
         run: |
           python3 - <<'PY'
           p='AqimBuild/app/src/main/java/com/shahboun/aqim/MainActivity.java'
@@ -45,11 +45,9 @@ jobs:
           s=s.replace('الإصدار 1.3.0','الإصدار 1.5.0').replace('الإصدار 1.4.0','الإصدار 1.5.0')
           s=s.replace('p.getString("adhanChoice","mecca2013")','p.getString("adhanChoice","yasser_aldosari")')
           s=s.replace('final Runnable tick=new Runnable(){public void run(){refreshHeader();handler.postDelayed(this,30000);}};','final Runnable tick=new Runnable(){public void run(){refreshHeader();handler.postDelayed(this,PrayerPresentation.showSeconds(MainActivity.this)?1000:30000);}};')
-
           old='loadFont();requestRuntimePermissions();if(!getSharedPreferences(PREF,MODE_PRIVATE).getBoolean("onboarded",false))showOnboarding();else showHome();scheduleAll(this);startStatusIfEnabled();handler.post(tick);'
           new='loadFont();requestRuntimePermissions();String target=getIntent().getStringExtra("target");boolean onboarded=getSharedPreferences(PREF,MODE_PRIVATE).getBoolean("onboarded",false);if(!onboarded||"onboarding".equals(target))showOnboarding();else if("settings".equals(target))showSettings();else if("tasbih".equals(target))showTasbih();else if("prayers".equals(target))showPrayerTimes();else if("about".equals(target))showAbout();else showHome();scheduleAll(this);startStatusIfEnabled();handler.post(tick);'
           if old in s:s=s.replace(old,new)
-
           old_picker='String[][] a={{"mecca2013","المسجد الحرام – مكة"},{"prophet","المسجد النبوي – المدينة"},{"classic","أذان كلاسيكي"},{"africa","أذان مرخص – إفريقيا"},{"default","أذان مفتوح CC0"},{"custom","ملف من الهاتف"}};'
           new_picker='String[][] a={{"abdelrahman_alqodai","عبدالرحمن القضاعي"},{"islam_sobhi","إسلام صبحي"},{"omar_hisham","عمر هشام العربي"},{"nasser_alqatami","ناصر القطامي"},{"yasser_aldosari","ياسر الدوسري"},{"custom","ملف من الهاتف"}};'
           s=s.replace(old_picker,new_picker)
@@ -57,35 +55,23 @@ jobs:
           if start!=-1:
             end=s.find('\n    void showFollowSettings()',start)
             if end!=-1:s=s[:start]+'    String adhanLabel(String c){return AdhanService.labelFor(c);}\n'+s[end:]
-
-          # Replace prayer-times page with format + iqama display.
           start=s.find('    void showPrayerTimes(){')
           end=s.find('\n    void showAzkar(){',start)
           if start!=-1 and end!=-1:
-            repl='''    void showPrayerTimes(){screen=1;LinearLayout root=page("مواقيت الصلاة");LinkedHashMap<String,Calendar> t=todayTimes(this);TimeZone tz=TimeZone.getTimeZone(getSharedPreferences(PREF,MODE_PRIVATE).getString("tzId",TimeZone.getDefault().getID()));Calendar now=Calendar.getInstance(tz);for(Map.Entry<String,Calendar> e:t.entrySet()){if("الغروب".equals(e.getKey()))continue;LinearLayout row=new LinearLayout(this);row.setOrientation(LinearLayout.VERTICAL);row.setGravity(Gravity.CENTER);row.addView(text(e.getKey()+"   "+PrayerPresentation.format(this,e.getValue()),18,GREEN,true),new LinearLayout.LayoutParams(-1,dp(42)));if(!"الشروق".equals(e.getKey()))row.addView(text(PrayerPresentation.iqamaStatus(this,e.getKey(),e.getValue(),now),13,MUTED,false),new LinearLayout.LayoutParams(-1,dp(34)));cardAdd(root,row);}String tzName=tz.getID();TextView note=text("حساب محلي Offline • المنطقة الزمنية: "+tzName+" • يمكنك تعديل طريقة العرض والإقامة وفروق الدقائق من الإعدادات.",13,MUTED,false);cardAdd(root,note);setContentView(scroll(root));}'''
+            repl='    void showPrayerTimes(){screen=1;LinearLayout root=page("مواقيت الصلاة");LinkedHashMap<String,Calendar> t=todayTimes(this);TimeZone tz=TimeZone.getTimeZone(getSharedPreferences(PREF,MODE_PRIVATE).getString("tzId",TimeZone.getDefault().getID()));Calendar now=Calendar.getInstance(tz);for(Map.Entry<String,Calendar> e:t.entrySet()){if("الغروب".equals(e.getKey()))continue;LinearLayout row=new LinearLayout(this);row.setOrientation(LinearLayout.VERTICAL);row.setGravity(Gravity.CENTER);row.addView(text(e.getKey()+"   "+PrayerPresentation.format(this,e.getValue()),18,GREEN,true),new LinearLayout.LayoutParams(-1,dp(42)));if(!"الشروق".equals(e.getKey()))row.addView(text(PrayerPresentation.iqamaStatus(this,e.getKey(),e.getValue(),now),13,MUTED,false),new LinearLayout.LayoutParams(-1,dp(34)));cardAdd(root,row);}TextView note=text("حساب محلي Offline • المنطقة الزمنية: "+tz.getID()+" • يمكنك تعديل طريقة العرض والإقامة وفروق الدقائق من الإعدادات.",13,MUTED,false);cardAdd(root,note);setContentView(scroll(root));}'
             s=s[:start]+repl+s[end:]
-
-          # Add 12/24, seconds and iqama settings after city selector.
           anchor='        Button city=button("المدينة: "+p.getString("city","طرابلس")+"  ▼",false);city.setOnClickListener(v->showCityPicker());addSetting(root,city);'
-          addition='''        Button city=button("المدينة: "+p.getString("city","طرابلس")+"  ▼",false);city.setOnClickListener(v->showCityPicker());addSetting(root,city);
-        Button fmt=button("نظام الوقت: "+(p.getBoolean("time24",true)?"24 ساعة":"12 ساعة"),false);fmt.setOnClickListener(v->{p.edit().putBoolean("time24",!p.getBoolean("time24",true)).apply();showSettings();});addSetting(root,fmt);
-        Button secs=button(p.getBoolean("showSeconds",false)?"إخفاء الثواني":"إظهار الثواني",false);secs.setOnClickListener(v->{p.edit().putBoolean("showSeconds",!p.getBoolean("showSeconds",false)).apply();showSettings();});addSetting(root,secs);
-        Button iq=button("إعداد أوقات الإقامة لكل صلاة",false);iq.setOnClickListener(v->showIqamaSettings());addSetting(root,iq);'''
+          addition='        Button city=button("المدينة: "+p.getString("city","طرابلس")+"  ▼",false);city.setOnClickListener(v->showCityPicker());addSetting(root,city);\n        Button fmt=button("نظام الوقت: "+(p.getBoolean("time24",true)?"24 ساعة":"12 ساعة"),false);fmt.setOnClickListener(v->{p.edit().putBoolean("time24",!p.getBoolean("time24",true)).apply();showSettings();});addSetting(root,fmt);\n        Button secs=button(p.getBoolean("showSeconds",false)?"إخفاء الثواني":"إظهار الثواني",false);secs.setOnClickListener(v->{p.edit().putBoolean("showSeconds",!p.getBoolean("showSeconds",false)).apply();showSettings();});addSetting(root,secs);\n        Button iq=button("إعداد أوقات الإقامة لكل صلاة",false);iq.setOnClickListener(v->showIqamaSettings());addSetting(root,iq);'
           s=s.replace(anchor,addition)
-
-          # Add iqama editor.
           marker='    void showOffsets(){'
           if marker in s and 'void showIqamaSettings(){' not in s:
-            iqama='''    void showIqamaSettings(){screen=12;LinearLayout root=page("أوقات الإقامة");SharedPreferences p=getSharedPreferences(PREF,MODE_PRIVATE);String[] names={"الفجر","الظهر","العصر","المغرب","العشاء"};String[] keys={"iqama_fajr","iqama_dhuhr","iqama_asr","iqama_maghrib","iqama_isha"};int[] defs={20,20,20,10,20};EditText[] es=new EditText[names.length];for(int i=0;i<names.length;i++){es[i]=numField(String.valueOf(p.getInt(keys[i],defs[i])));cardAdd(root,labeled("الإقامة بعد أذان "+names[i]+" بالدقائق",es[i]));}Button save=button("حفظ أوقات الإقامة",true);save.setOnClickListener(v->{SharedPreferences.Editor ed=p.edit();for(int i=0;i<keys.length;i++)ed.putInt(keys[i],Math.max(0,Math.min(120,number(es[i],defs[i]))));ed.apply();PrayerWidget.updateAll(this);showSettings();});addSetting(root,save);setContentView(scroll(root));}\n'''
+            iqama='    void showIqamaSettings(){screen=12;LinearLayout root=page("أوقات الإقامة");SharedPreferences p=getSharedPreferences(PREF,MODE_PRIVATE);String[] names={"الفجر","الظهر","العصر","المغرب","العشاء"};String[] keys={"iqama_fajr","iqama_dhuhr","iqama_asr","iqama_maghrib","iqama_isha"};int[] defs={20,20,20,10,20};EditText[] es=new EditText[names.length];for(int i=0;i<names.length;i++){es[i]=numField(String.valueOf(p.getInt(keys[i],defs[i])));cardAdd(root,labeled("الإقامة بعد أذان "+names[i]+" بالدقائق",es[i]));}Button save=button("حفظ أوقات الإقامة",true);save.setOnClickListener(v->{SharedPreferences.Editor ed=p.edit();for(int i=0;i<keys.length;i++)ed.putInt(keys[i],Math.max(0,Math.min(120,number(es[i],defs[i]))));ed.apply();PrayerWidget.updateAll(this);showSettings();});addSetting(root,save);setContentView(scroll(root));}\n'
             s=s.replace(marker,iqama+marker)
-
-          # Replace next-prayer calculation/display with timezone-aware 12/24 + seconds + iqama.
           start=s.find('    public static String[] nextPrayerInfo(Context c){')
           end=s.find('\n    static double[] currentLatLon(Context c){',start)
           if start!=-1 and end!=-1:
-            repl='''    public static String[] nextPrayerInfo(Context c){TimeZone tz=TimeZone.getTimeZone(c.getSharedPreferences(PREF,MODE_PRIVATE).getString("tzId",TimeZone.getDefault().getID()));LinkedHashMap<String,Calendar> times=todayTimes(c);Calendar now=Calendar.getInstance(tz);String found=null;Calendar when=null;for(Map.Entry<String,Calendar>e:times.entrySet()){if("الشروق".equals(e.getKey())||"الغروب".equals(e.getKey()))continue;if(e.getValue().after(now)){found=e.getKey();when=e.getValue();break;}}if(found==null){Calendar d=(Calendar)now.clone();d.add(Calendar.DAY_OF_MONTH,1);found="الفجر";when=timesFor(c,d).get("الفجر");}long ms=Math.max(0,when.getTimeInMillis()-now.getTimeInMillis());String city=c.getSharedPreferences(PREF,MODE_PRIVATE).getString("city","طرابلس");String iq=PrayerPresentation.iqamaStatus(c,found,when,now);return new String[]{found,PrayerPresentation.format(c,when),PrayerPresentation.countdown(c,ms),city+" • "+tz.getID(),iq};}'''
+            repl='    public static String[] nextPrayerInfo(Context c){TimeZone tz=TimeZone.getTimeZone(c.getSharedPreferences(PREF,MODE_PRIVATE).getString("tzId",TimeZone.getDefault().getID()));LinkedHashMap<String,Calendar> times=todayTimes(c);Calendar now=Calendar.getInstance(tz);String found=null;Calendar when=null;for(Map.Entry<String,Calendar>e:times.entrySet()){if("الشروق".equals(e.getKey())||"الغروب".equals(e.getKey()))continue;if(e.getValue().after(now)){found=e.getKey();when=e.getValue();break;}}if(found==null){Calendar d=(Calendar)now.clone();d.add(Calendar.DAY_OF_MONTH,1);found="الفجر";when=timesFor(c,d).get("الفجر");}long ms=Math.max(0,when.getTimeInMillis()-now.getTimeInMillis());String city=c.getSharedPreferences(PREF,MODE_PRIVATE).getString("city","طرابلس");String iq=PrayerPresentation.iqamaStatus(c,found,when,now);return new String[]{found,PrayerPresentation.format(c,when),PrayerPresentation.countdown(c,ms),city+" • "+tz.getID(),iq};}'
             s=s[:start]+repl+s[end:]
-
           s=s.replace('addPermission(root,"إيقاف الأذان بزر الصوت",accessibilityEnabled(),v->startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));','cardAdd(root,text("إيقاف الأذان بزر رفع/خفض الصوت يعمل أثناء تشغيل الأذان ولا يحتاج خدمة إمكانية الوصول.",13,MUTED,false));')
           start=s.find('    boolean accessibilityEnabled(){')
           if start!=-1:
