@@ -26,13 +26,15 @@ jobs:
           $ErrorActionPreference='Stop'
           $parts=Get-ChildItem '.ci-staging/windows/source.min.b64.*' | Sort-Object Name
           if($parts.Count -ne 2){ throw "WINDOWS_SOURCE_PART_COUNT_$($parts.Count)" }
-          $raw=($parts | ForEach-Object { Get-Content $_.FullName -Raw }) -join ''
-          $b64=[regex]::Replace($raw,'[^A-Za-z0-9+/]','')
-          $rem=$b64.Length % 4
-          if($rem -eq 1){ throw 'WINDOWS_SOURCE_BASE64_IRRECOVERABLE' }
-          if($rem -gt 0){ $b64 += '=' * (4-$rem) }
           $archive=Join-Path $env:RUNNER_TEMP 'shahboun-source.tar.xz'
-          [IO.File]::WriteAllBytes($archive,[Convert]::FromBase64String($b64))
+          $out=[IO.File]::Open($archive,[IO.FileMode]::Create,[IO.FileAccess]::Write)
+          try {
+            foreach($p in $parts){
+              $b64=[regex]::Replace((Get-Content $p.FullName -Raw),'[^A-Za-z0-9+/=]','')
+              $bytes=[Convert]::FromBase64String($b64)
+              $out.Write($bytes,0,$bytes.Length)
+            }
+          } finally { $out.Dispose() }
           $hash=(Get-FileHash $archive -Algorithm SHA256).Hash.ToLower()
           Write-Host "source sha256=$hash"
           if($hash -ne 'edefedb3373ca0b3b4eb5160a6f356388da44e2523be2fe5ffc12aa2ff27f5b0'){ throw "WINDOWS_SOURCE_SHA256_MISMATCH_$hash" }
@@ -71,12 +73,16 @@ jobs:
         run: |
           $ErrorActionPreference='Stop'
           $parts=Get-ChildItem '.ci-assets/official-logo.b64.*' | Sort-Object Name
-          $raw=($parts | ForEach-Object { Get-Content $_.FullName -Raw }) -join ''
-          $b64=[regex]::Replace($raw,'[^A-Za-z0-9+/]','')
-          $rem=$b64.Length % 4
-          if($rem -gt 0){$b64 += '='*(4-$rem)}
+          if(!$parts){ throw 'OFFICIAL_LOGO_PARTS_MISSING' }
           $src=Join-Path $env:RUNNER_TEMP 'official-logo.jpg'
-          [IO.File]::WriteAllBytes($src,[Convert]::FromBase64String($b64))
+          $out=[IO.File]::Open($src,[IO.FileMode]::Create,[IO.FileAccess]::Write)
+          try {
+            foreach($p in $parts){
+              $b64=[regex]::Replace((Get-Content $p.FullName -Raw),'[^A-Za-z0-9+/=]','')
+              $bytes=[Convert]::FromBase64String($b64)
+              $out.Write($bytes,0,$bytes.Length)
+            }
+          } finally { $out.Dispose() }
           choco install imagemagick -y --no-progress
           $m=(Get-Command magick.exe).Source
           New-Item -ItemType Directory -Force apps/windows-current/public/assets,apps/windows-current/installer | Out-Null
