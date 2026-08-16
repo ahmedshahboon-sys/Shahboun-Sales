@@ -31,18 +31,26 @@ jobs:
           python3 - <<'PY'
           import json,glob
           for f in glob.glob('AqimBuild/app/src/main/assets/quran/*.json'):
-            d=json.load(open(f,encoding='utf-8')); assert isinstance(d,list) and len(d)>6000
+            d=json.load(open(f,encoding='utf-8'))
+            assert isinstance(d,list) and len(d)>6000
             assert {int(x.get('sura_no',x.get('sora',0))) for x in d}==set(range(1,115))
           PY
-      - name: Patch global timezone and routing
+      - name: Patch 1.5.0 routing timezone and permissions
         run: |
           python3 - <<'PY'
-          p='AqimBuild/app/src/main/java/com/shahboun/aqim/MainActivity.java';s=open(p,encoding='utf-8').read()
-          s=s.replace('TimeZone.getTimeZone("Africa/Tripoli")','TimeZone.getTimeZone(c.getSharedPreferences(PREF,MODE_PRIVATE).getString("tzId","Africa/Tripoli"))')
+          p='AqimBuild/app/src/main/java/com/shahboun/aqim/MainActivity.java'
+          s=open(p,encoding='utf-8').read()
+          s=s.replace('import android.accessibilityservice.AccessibilityServiceInfo;\n','').replace('import android.view.accessibility.AccessibilityManager;\n','')
+          s=s.replace('TimeZone.getTimeZone("Africa/Tripoli")','TimeZone.getTimeZone(c.getSharedPreferences(PREF,MODE_PRIVATE).getString("tzId",TimeZone.getDefault().getID()))')
           s=s.replace('الإصدار 1.3.0','الإصدار 1.5.0').replace('الإصدار 1.4.0','الإصدار 1.5.0')
           old='loadFont();requestRuntimePermissions();if(!getSharedPreferences(PREF,MODE_PRIVATE).getBoolean("onboarded",false))showOnboarding();else showHome();scheduleAll(this);startStatusIfEnabled();handler.post(tick);'
-          new='loadFont();requestRuntimePermissions();String target=getIntent().getStringExtra("target");boolean onboarded=getSharedPreferences(PREF,MODE_PRIVATE).getBoolean("onboarded",false);if(!onboarded||"onboarding".equals(target))showOnboarding();else if("settings".equals(target))showSettings();else if("tasbih".equals(target))showTasbih();else if("prayers".equals(target))showPrayerTimes();else showHome();scheduleAll(this);startStatusIfEnabled();handler.post(tick);'
+          new='loadFont();requestRuntimePermissions();String target=getIntent().getStringExtra("target");boolean onboarded=getSharedPreferences(PREF,MODE_PRIVATE).getBoolean("onboarded",false);if(!onboarded||"onboarding".equals(target))showOnboarding();else if("settings".equals(target))showSettings();else if("tasbih".equals(target))showTasbih();else if("prayers".equals(target))showPrayerTimes();else if("about".equals(target))showAbout();else showHome();scheduleAll(this);startStatusIfEnabled();handler.post(tick);'
           if old in s:s=s.replace(old,new)
+          s=s.replace('addPermission(root,"إيقاف الأذان بزر الصوت",accessibilityEnabled(),v->startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));','cardAdd(root,text("إيقاف الأذان بزر رفع/خفض الصوت يعمل أثناء تشغيل الأذان ولا يحتاج خدمة إمكانية الوصول.",13,MUTED,false));')
+          start=s.find('    boolean accessibilityEnabled(){')
+          if start!=-1:
+            end=s.find('\n\n    void requestRuntimePermissions()',start)
+            if end!=-1:s=s[:start]+s[end+2:]
           open(p,'w',encoding='utf-8').write(s)
           PY
       - name: Build release APK
