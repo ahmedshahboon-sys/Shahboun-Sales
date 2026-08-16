@@ -1,0 +1,45 @@
+name: Diagnose Windows u3 Source
+
+on:
+  push:
+    branches: [suite-6.0.2-repair]
+    paths: ['.github/workflows/windows-u3-diagnostic.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v5
+      - name: Reconstruct u3 source
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $parts=Get-ChildItem '.ci-staging/windows/u3.*' | Sort-Object Name
+          if(!$parts){ throw 'U3_PARTS_MISSING' }
+          Write-Host "count=$($parts.Count)"
+          $parts | ForEach-Object { Write-Host "$($_.Name) size=$($_.Length)" }
+          $raw=($parts | ForEach-Object { Get-Content $_.FullName -Raw }) -join ''
+          $b64=[regex]::Replace($raw,'[^A-Za-z0-9+/=]','')
+          Write-Host "clean_length=$($b64.Length) mod4=$($b64.Length%4) padding_count=$(([regex]::Matches($b64,'=')).Count)"
+          $firstPad=$b64.IndexOf('=')
+          Write-Host "first_padding=$firstPad"
+          if($firstPad -ge 0 -and $firstPad -lt ($b64.Length-2)){ throw "INTERNAL_PADDING_AT_$firstPad" }
+          $archive=Join-Path $env:RUNNER_TEMP 'u3-source.tar.xz'
+          [IO.File]::WriteAllBytes($archive,[Convert]::FromBase64String($b64))
+          $hash=(Get-FileHash $archive -Algorithm SHA256).Hash.ToLower()
+          Write-Host "sha256=$hash bytes=$((Get-Item $archive).Length)"
+          tar -tf $archive | Select-Object -First 50
+          if($LASTEXITCODE -ne 0){ throw 'U3_TAR_LIST_FAILED' }
+          $extract=Join-Path $env:RUNNER_TEMP 'u3-extract'
+          New-Item -ItemType Directory -Force $extract | Out-Null
+          tar -xf $archive -C $extract
+          if($LASTEXITCODE -ne 0){ throw 'U3_EXTRACT_FAILED' }
+          Write-Host 'ROOTS:'
+          Get-ChildItem $extract -Force | ForEach-Object { Write-Host $_.FullName }
+          $pkg=Get-ChildItem $extract -Recurse -Filter package.json | Select-Object -First 10
+          if(!$pkg){ throw 'U3_PACKAGE_JSON_NOT_FOUND' }
+          $pkg | ForEach-Object { Write-Host "PACKAGE=$($_.FullName)" }
