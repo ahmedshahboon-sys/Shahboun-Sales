@@ -5,6 +5,7 @@ import android.app.*;
 import android.content.*;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
+import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.location.Location;
 import android.location.LocationManager;
@@ -16,180 +17,95 @@ import android.widget.*;
 import java.util.*;
 
 public class MainActivity extends Activity {
-    static final String PREF = "aqim";
-    static final int GREEN = Color.rgb(15,76,58), GOLD = Color.rgb(205,168,92), IVORY = Color.rgb(248,244,235), TEXT = Color.rgb(35,48,43);
-    static final LinkedHashMap<String,double[]> CITIES = new LinkedHashMap<>();
-    static {
-        CITIES.put("طرابلس",new double[]{32.8872,13.1913}); CITIES.put("بنغازي",new double[]{32.1167,20.0667});
-        CITIES.put("مصراتة",new double[]{32.3754,15.0925}); CITIES.put("الزاوية",new double[]{32.7571,12.7276});
-        CITIES.put("سبها",new double[]{27.0377,14.4283}); CITIES.put("البيضاء",new double[]{32.7627,21.7551});
-        CITIES.put("درنة",new double[]{32.7670,22.6367}); CITIES.put("طبرق",new double[]{32.0836,23.9764});
-        CITIES.put("غريان",new double[]{32.1722,13.0203}); CITIES.put("زليتن",new double[]{32.4674,14.5687});
-    }
+    static final String PREF="aqim";
+    static final int GREEN=Color.rgb(15,76,58), GREEN2=Color.rgb(24,105,79), GOLD=Color.rgb(205,168,92), IVORY=Color.rgb(248,244,235), TEXT=Color.rgb(35,48,43), MUTED=Color.rgb(104,112,108);
+    static final LinkedHashMap<String,double[]> CITIES=new LinkedHashMap<>();
+    static { CITIES.put("طرابلس",new double[]{32.8872,13.1913}); CITIES.put("بنغازي",new double[]{32.1167,20.0667}); CITIES.put("مصراتة",new double[]{32.3754,15.0925}); CITIES.put("الزاوية",new double[]{32.7571,12.7276}); CITIES.put("سبها",new double[]{27.0377,14.4283}); CITIES.put("البيضاء",new double[]{32.7627,21.7551}); CITIES.put("درنة",new double[]{32.7670,22.6367}); CITIES.put("طبرق",new double[]{32.0836,23.9764}); CITIES.put("غريان",new double[]{32.1722,13.0203}); CITIES.put("زليتن",new double[]{32.4674,14.5687}); }
 
-    TextView nextPrayer, countdown, locationLabel;
-    final Handler handler = new Handler(Looper.getMainLooper());
-    final Runnable tick = new Runnable(){ public void run(){ refreshHeader(); handler.postDelayed(this,30000); }};
+    FrameLayout host, panelLayer; TextView nextPrayer,countdown,locationLabel; Typeface cairo; boolean pendingBubble=false;
+    final Handler handler=new Handler(Looper.getMainLooper());
+    final Runnable tick=new Runnable(){ public void run(){ refreshHeader(); handler.postDelayed(this,30000); }};
 
-    @Override protected void onCreate(Bundle b){
-        super.onCreate(b);
-        getWindow().setStatusBarColor(GREEN); getWindow().setNavigationBarColor(IVORY);
-        requestNotifications();
-        View home=buildHome(); setContentView(home); applySystemInsets(home);
-        scheduleAll(this); handler.post(tick);
-    }
+    @Override protected void onCreate(Bundle b){ super.onCreate(b); loadFont(); getWindow().setStatusBarColor(GREEN); getWindow().setNavigationBarColor(IVORY); requestNotifications(); host=new FrameLayout(this); host.setBackgroundColor(IVORY); host.addView(buildHome(),new FrameLayout.LayoutParams(-1,-1)); setContentView(host); applyInsets(host); scheduleAll(this); handler.post(tick); }
+    @Override protected void onResume(){ super.onResume(); if(pendingBubble && (Build.VERSION.SDK_INT<23 || Settings.canDrawOverlays(this))){ pendingBubble=false; startBubble(); } }
     @Override protected void onDestroy(){ handler.removeCallbacks(tick); super.onDestroy(); }
 
-    void applySystemInsets(View v){
-        if(Build.VERSION.SDK_INT>=21){
-            v.setOnApplyWindowInsetsListener((view,insets)->{
-                int top, bottom;
-                if(Build.VERSION.SDK_INT>=30){ android.graphics.Insets x=insets.getInsets(WindowInsets.Type.systemBars()); top=x.top; bottom=x.bottom; }
-                else { top=insets.getSystemWindowInsetTop(); bottom=insets.getSystemWindowInsetBottom(); }
-                view.setPadding(0,top,0,bottom); return insets;
-            });
-        }
-    }
+    void loadFont(){ try{ if(Build.VERSION.SDK_INT>=26){ int id=getResources().getIdentifier("cairo","font",getPackageName()); if(id!=0)cairo=getResources().getFont(id); }}catch(Exception ignored){} if(cairo==null)cairo=Typeface.create("sans-serif",Typeface.NORMAL); }
+    void applyInsets(View v){ if(Build.VERSION.SDK_INT>=21)v.setOnApplyWindowInsetsListener((view,insets)->{ int top,bottom; if(Build.VERSION.SDK_INT>=30){android.graphics.Insets x=insets.getInsets(WindowInsets.Type.systemBars());top=x.top;bottom=x.bottom;}else{top=insets.getSystemWindowInsetTop();bottom=insets.getSystemWindowInsetBottom();} view.setPadding(0,top,0,bottom); return insets;}); }
 
     View buildHome(){
         ScrollView scroll=new ScrollView(this); scroll.setFillViewport(true); scroll.setBackgroundColor(IVORY);
-        LinearLayout root=new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setGravity(Gravity.CENTER_HORIZONTAL);
-        root.setPadding(dp(18),dp(18),dp(18),dp(28)); root.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
-        scroll.addView(root,new ScrollView.LayoutParams(-1,-2));
-
-        LinearLayout hero=new LinearLayout(this); hero.setOrientation(LinearLayout.VERTICAL); hero.setGravity(Gravity.CENTER);
-        hero.setPadding(dp(18),dp(16),dp(18),dp(16)); hero.setBackground(round(GREEN,28)); hero.setElevation(dp(7));
-        TextView title=text("أَقِم",38,Color.WHITE,true); title.setGravity(Gravity.CENTER); title.setPadding(0,dp(12),0,dp(4));
-        TextView sub=text("مؤذن ليبيا • صلاتك • ذكرك • يومك",16,Color.rgb(246,236,210),false); sub.setGravity(Gravity.CENTER); sub.setPadding(0,0,0,dp(12));
-        hero.addView(title); hero.addView(sub); root.addView(hero,new LinearLayout.LayoutParams(-1,-2));
-
-        LinearLayout card=new LinearLayout(this); card.setOrientation(LinearLayout.VERTICAL); card.setGravity(Gravity.CENTER);
-        card.setPadding(dp(18),dp(18),dp(18),dp(18)); card.setBackground(round(Color.WHITE,24)); card.setElevation(dp(5));
-        LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(-1,-2); cp.setMargins(0,dp(18),0,dp(18)); root.addView(card,cp);
-        locationLabel=text("",14,Color.DKGRAY,false); locationLabel.setGravity(Gravity.CENTER);
-        nextPrayer=text("",27,GREEN,true); nextPrayer.setGravity(Gravity.CENTER);
-        countdown=text("",18,GOLD,true); countdown.setGravity(Gravity.CENTER);
-        card.addView(locationLabel); card.addView(nextPrayer); card.addView(countdown);
-
+        LinearLayout root=col(); root.setGravity(Gravity.CENTER_HORIZONTAL); root.setPadding(dp(18),dp(18),dp(18),dp(30)); scroll.addView(root,new ScrollView.LayoutParams(-1,-2));
+        LinearLayout hero=col(); hero.setGravity(Gravity.CENTER); hero.setPadding(dp(18),dp(18),dp(18),dp(18)); hero.setBackground(round(GREEN,30)); hero.setElevation(dp(8));
+        TextView title=txt("أَقِم",40,Color.WHITE,true,Gravity.CENTER); TextView sub=txt("مؤذن ليبيا • صلاتك • ذكرك • يومك",16,Color.rgb(247,237,211),false,Gravity.CENTER); hero.addView(title); hero.addView(sub); root.addView(hero,lp(-1,-2,0,0,0,0));
+        LinearLayout card=card(); card.setGravity(Gravity.CENTER); locationLabel=txt("",14,MUTED,false,Gravity.CENTER); nextPrayer=txt("",26,GREEN,true,Gravity.CENTER); countdown=txt("",18,GOLD,true,Gravity.CENTER); card.addView(locationLabel); card.addView(nextPrayer); card.addView(countdown); root.addView(card,lp(-1,-2,0,dp(18),0,dp(16)));
         GridLayout grid=new GridLayout(this); grid.setColumnCount(getResources().getConfiguration().smallestScreenWidthDp>=600?3:2); grid.setAlignmentMode(GridLayout.ALIGN_BOUNDS);
-        String[] labels={"مواقيت الصلاة","الأذكار","المسبحة","القبلة","الإعدادات","حول التطبيق"};
-        for(int i=0;i<labels.length;i++){
-            Button x=button(labels[i]); final int id=i+1; x.setOnClickListener(v->open(id));
-            GridLayout.LayoutParams gp=new GridLayout.LayoutParams(); gp.width=0; gp.height=dp(82); gp.columnSpec=GridLayout.spec(GridLayout.UNDEFINED,1f); gp.setMargins(dp(6),dp(6),dp(6),dp(6)); grid.addView(x,gp);
-        }
+        String[] icons={"◈","✦","◉","⌁","⚙","ⓘ"}; String[] labels={"مواقيت الصلاة","الأذكار","المسبحة","القبلة","الإعدادات","حول التطبيق"};
+        for(int i=0;i<labels.length;i++){ LinearLayout tile=tile(icons[i],labels[i]); final int id=i+1; tile.setOnClickListener(v->open(id)); GridLayout.LayoutParams gp=new GridLayout.LayoutParams(); gp.width=0;gp.height=dp(102);gp.columnSpec=GridLayout.spec(GridLayout.UNDEFINED,1f);gp.setMargins(dp(6),dp(6),dp(6),dp(6));grid.addView(tile,gp); }
         root.addView(grid,new LinearLayout.LayoutParams(-1,-2));
-        TextView footer=text("الإصدار 1.1.0 • تصميم وتطوير أحمد شهبون",12,Color.GRAY,false); footer.setGravity(Gravity.CENTER); footer.setPadding(0,dp(22),0,0); root.addView(footer);
-        refreshHeader(); return scroll;
+        Button bubble=primary("فقاعة التسبيح العائمة"); bubble.setOnClickListener(v->requestBubble()); root.addView(bubble,lp(-1,dp(58),0,dp(14),0,0));
+        root.addView(txt("الإصدار 1.2.0 • تصميم وتطوير أحمد شهبون",12,MUTED,false,Gravity.CENTER),lp(-1,-2,0,dp(22),0,0)); refreshHeader(); return scroll;
     }
 
-    Button button(String s){ Button b=new Button(this); b.setText(s); b.setTextSize(16); b.setTextColor(TEXT); b.setAllCaps(false); b.setGravity(Gravity.CENTER); b.setPadding(dp(8),0,dp(8),0); b.setBackground(round(Color.WHITE,22)); b.setElevation(dp(5)); return b; }
-    TextView text(String s,int size,int color,boolean bold){ TextView t=new TextView(this); t.setText(s); t.setTextSize(size); t.setTextColor(color); t.setGravity(Gravity.CENTER_VERTICAL|Gravity.RIGHT); if(bold)t.setTypeface(android.graphics.Typeface.DEFAULT_BOLD); return t; }
-    GradientDrawable round(int color,int r){ GradientDrawable g=new GradientDrawable(); g.setColor(color); g.setCornerRadius(dp(r)); return g; }
-    int dp(int v){ return Math.round(v*getResources().getDisplayMetrics().density); }
+    LinearLayout col(){ LinearLayout v=new LinearLayout(this);v.setOrientation(LinearLayout.VERTICAL);v.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);return v; }
+    LinearLayout card(){ LinearLayout v=col();v.setPadding(dp(18),dp(18),dp(18),dp(18));v.setBackground(round(Color.WHITE,26));v.setElevation(dp(5));return v; }
+    LinearLayout tile(String icon,String label){ LinearLayout v=col();v.setGravity(Gravity.CENTER);v.setPadding(dp(8),dp(10),dp(8),dp(10));v.setBackground(round(Color.WHITE,24));v.setElevation(dp(5));v.addView(txt(icon,25,GOLD,true,Gravity.CENTER));v.addView(txt(label,15,TEXT,true,Gravity.CENTER));return v; }
+    TextView txt(String s,int size,int color,boolean bold,int gravity){ TextView t=new TextView(this);t.setText(s);t.setTextSize(size);t.setTextColor(color);t.setGravity(gravity);t.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);t.setPadding(dp(5),dp(5),dp(5),dp(5));t.setTypeface(cairo,bold?Typeface.BOLD:Typeface.NORMAL);return t; }
+    Button primary(String s){ Button b=new Button(this);b.setText(s);b.setTextSize(15);b.setTextColor(Color.WHITE);b.setAllCaps(false);b.setGravity(Gravity.CENTER);b.setTypeface(cairo,Typeface.BOLD);b.setBackground(round(GREEN,20));b.setElevation(dp(4));b.setPadding(dp(12),0,dp(12),0);return b; }
+    Button secondary(String s){ Button b=primary(s);b.setTextColor(TEXT);b.setBackground(round(Color.WHITE,20));return b; }
+    GradientDrawable round(int c,int r){ GradientDrawable g=new GradientDrawable();g.setColor(c);g.setCornerRadius(dp(r));return g; }
+    LinearLayout.LayoutParams lp(int w,int h,int l,int t,int r,int b){ LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(w,h);p.setMargins(l,t,r,b);return p; }
+    int dp(int v){return Math.round(v*getResources().getDisplayMetrics().density);}
 
-    void refreshHeader(){
-        if(nextPrayer==null)return;
-        SharedPreferences p=getSharedPreferences(PREF,MODE_PRIVATE); String city=p.getString("city","طرابلس"); locationLabel.setText("الموقع: "+city+" • توقيت ليبيا");
-        LinkedHashMap<String,Calendar> times=todayTimes(this); Calendar now=Calendar.getInstance(TimeZone.getTimeZone("Africa/Tripoli")); String found=null; Calendar when=null;
-        for(Map.Entry<String,Calendar> e:times.entrySet()){ if("الشروق".equals(e.getKey())||"الغروب".equals(e.getKey()))continue; if(e.getValue().after(now)){found=e.getKey();when=e.getValue();break;} }
-        if(found==null){ Calendar tomorrow=(Calendar)now.clone(); tomorrow.add(Calendar.DAY_OF_MONTH,1); found="الفجر"; when=timesFor(this,tomorrow).get("الفجر"); }
-        long ms=Math.max(0,when.getTimeInMillis()-now.getTimeInMillis()), h=ms/3600000, m=(ms%3600000)/60000;
-        nextPrayer.setText("الصلاة القادمة: "+found+"  "+PrayerTimes.format(when)); countdown.setText(String.format(Locale.US,"باقي %02d:%02d",h,m));
-    }
+    void open(int id){ if(id==1)showPrayerTimes();else if(id==2)showAzkar();else if(id==3)showTasbih();else if(id==4)showQibla();else if(id==5)showSettings();else showAbout(); }
 
-    void open(int id){ if(id==1)showPrayerTimes(); else if(id==2)showAzkar(); else if(id==3)showTasbih(); else if(id==4)showQibla(); else if(id==5)showSettings(); else showAbout(); }
+    void showPanel(String title,View body){ closePanel(); panelLayer=new FrameLayout(this);panelLayer.setBackgroundColor(0x99000000);panelLayer.setPadding(dp(14),dp(14),dp(14),dp(14)); LinearLayout shell=col();shell.setPadding(dp(16),dp(14),dp(16),dp(16));shell.setBackground(round(IVORY,30));shell.setElevation(dp(14)); TextView head=txt(title,22,GREEN,true,Gravity.CENTER);shell.addView(head,lp(-1,-2,0,0,0,dp(8))); FrameLayout content=new FrameLayout(this);content.setBackground(round(Color.WHITE,24));content.setPadding(dp(12),dp(12),dp(12),dp(12));content.addView(body,new FrameLayout.LayoutParams(-1,-1));shell.addView(content,new LinearLayout.LayoutParams(-1,0,1));Button close=secondary("إغلاق");close.setOnClickListener(v->closePanel());shell.addView(close,lp(-1,dp(54),0,dp(12),0,0)); FrameLayout.LayoutParams sp=new FrameLayout.LayoutParams(-1,-1,Gravity.CENTER);sp.setMargins(dp(2),dp(2),dp(2),dp(2));panelLayer.addView(shell,sp);host.addView(panelLayer,new FrameLayout.LayoutParams(-1,-1)); }
+    void closePanel(){ if(panelLayer!=null&&host!=null){host.removeView(panelLayer);panelLayer=null;} }
 
-    void showPrayerTimes(){
-        LinkedHashMap<String,Calendar> t=todayTimes(this); StringBuilder s=new StringBuilder("مواقيت اليوم • ").append(getSharedPreferences(PREF,MODE_PRIVATE).getString("city","طرابلس")).append("\n\n");
-        for(Map.Entry<String,Calendar> e:t.entrySet()) if(!"الغروب".equals(e.getKey())) s.append(e.getKey()).append("     ").append(PrayerTimes.format(e.getValue())).append("\n\n");
-        s.append("طريقة الحساب الافتراضية: الهيئة المصرية العامة للمساحة\nيمكن تعديل كل صلاة بالدقائق من الإعدادات.");
-        new AlertDialog.Builder(this).setTitle("مواقيت الصلاة").setMessage(s.toString()).setPositiveButton("حسناً",null).show();
-    }
+    void showPrayerTimes(){ ScrollView sc=new ScrollView(this);LinearLayout box=col();box.setPadding(dp(6),dp(6),dp(6),dp(12));sc.addView(box);LinkedHashMap<String,Calendar> t=todayTimes(this);box.addView(txt("مواقيت اليوم • "+getSharedPreferences(PREF,MODE_PRIVATE).getString("city","طرابلس"),16,MUTED,false,Gravity.CENTER));for(Map.Entry<String,Calendar>e:t.entrySet()){if("الغروب".equals(e.getKey()))continue;LinearLayout row=new LinearLayout(this);row.setGravity(Gravity.CENTER_VERTICAL);row.setPadding(dp(10),dp(8),dp(10),dp(8));row.setBackground(round(IVORY,18));row.addView(txt(e.getKey(),16,TEXT,true,Gravity.RIGHT),new LinearLayout.LayoutParams(0,dp(48),1));row.addView(txt(PrayerTimes.format(e.getValue()),18,GREEN,true,Gravity.CENTER),new LinearLayout.LayoutParams(dp(110),dp(48)));box.addView(row,lp(-1,-2,0,dp(5),0,0));}box.addView(txt("طريقة الحساب: الهيئة المصرية العامة للمساحة • يمكن تعويض كل صلاة بالدقائق من الإعدادات.",13,MUTED,false,Gravity.CENTER));showPanel("مواقيت الصلاة",sc); }
 
-    void showAzkar(){
-        String msg="أذكار مختارة\n\n• سبحان الله وبحمده — 100 مرة.\nالمصدر: صحيح البخاري 6405، صحيح مسلم 2691.\n\n• أستغفر الله وأتوب إليه — اجعل لك ورداً يومياً.\n\n• سبحان الله • الحمد لله • الله أكبر.\n\nمكتبة الأذكار الموثقة ستتوسع في تحديثات أَقِم القادمة.";
-        new AlertDialog.Builder(this).setTitle("الذكر والاستغفار").setMessage(msg).setPositiveButton("سبحان الله وبحمده",(d,w)->incrementDhikr()).setNegativeButton("إغلاق",null).show();
-    }
-    void incrementDhikr(){ SharedPreferences p=getSharedPreferences(PREF,MODE_PRIVATE); int n=p.getInt("dhikr",0)+1; p.edit().putInt("dhikr",n).apply(); Toast.makeText(this,"ورد اليوم: "+n,Toast.LENGTH_SHORT).show(); }
+    void showAzkar(){ ScrollView sc=new ScrollView(this);LinearLayout box=col();box.setPadding(dp(6),dp(6),dp(6),dp(10));box.addView(txt("ذِكر اليوم",20,GREEN,true,Gravity.CENTER));box.addView(txt("سبحان الله وبحمده",23,TEXT,true,Gravity.CENTER));box.addView(txt("ورد مقترح: 100 مرة • المصدر: صحيح البخاري 6405 وصحيح مسلم 2691",13,MUTED,false,Gravity.CENTER));Button add=primary("سبحان الله وبحمده +1");add.setOnClickListener(v->{SharedPreferences p=getSharedPreferences(PREF,MODE_PRIVATE);int n=p.getInt("dhikr",0)+1;p.edit().putInt("dhikr",n).apply();Toast.makeText(this,"ورد اليوم: "+n,Toast.LENGTH_SHORT).show();});box.addView(add,lp(-1,dp(58),0,dp(14),0,0));box.addView(txt("أستغفر الله وأتوب إليه\n\nسبحان الله • الحمد لله • الله أكبر\n\nاللهم أعنّي على ذكرك وشكرك وحسن عبادتك",17,TEXT,false,Gravity.CENTER));sc.addView(box);showPanel("الأذكار والاستغفار",sc); }
 
-    void showTasbih(){
-        final SharedPreferences p=getSharedPreferences(PREF,MODE_PRIVATE); final TextView count=text(String.valueOf(p.getInt("tasbih",0)),42,GREEN,true); count.setGravity(Gravity.CENTER);
-        LinearLayout box=new LinearLayout(this); box.setOrientation(LinearLayout.VERTICAL); box.setPadding(dp(24),dp(20),dp(24),dp(12));
-        Button add=button("سبّح +1"), reset=button("تصفير العداد");
-        add.setOnClickListener(v->{int n=p.getInt("tasbih",0)+1;p.edit().putInt("tasbih",n).apply();count.setText(String.valueOf(n));});
-        reset.setOnClickListener(v->{p.edit().putInt("tasbih",0).apply();count.setText("0");});
-        box.addView(count,new LinearLayout.LayoutParams(-1,dp(90))); LinearLayout.LayoutParams bp=new LinearLayout.LayoutParams(-1,dp(62)); bp.setMargins(0,dp(8),0,dp(8)); box.addView(add,bp); box.addView(reset,bp);
-        new AlertDialog.Builder(this).setTitle("المسبحة الإلكترونية").setView(box).setPositiveButton("إغلاق",null).show();
-    }
+    void showTasbih(){ SharedPreferences p=getSharedPreferences(PREF,MODE_PRIVATE);LinearLayout box=col();box.setGravity(Gravity.CENTER_HORIZONTAL);TextView count=txt(String.valueOf(p.getInt("tasbih",0)),48,GREEN,true,Gravity.CENTER);box.addView(count,lp(-1,dp(100),0,0,0,dp(8)));Button add=primary("تسبيح +1");add.setOnClickListener(v->{int n=p.getInt("tasbih",0)+1;p.edit().putInt("tasbih",n).apply();count.setText(String.valueOf(n));v.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP);});box.addView(add,lp(-1,dp(58),0,dp(6),0,0));Button floatB=secondary("تشغيل الفقاعة فوق التطبيقات");floatB.setOnClickListener(v->requestBubble());box.addView(floatB,lp(-1,dp(58),0,dp(10),0,0));Button stop=secondary("إيقاف الفقاعة");stop.setOnClickListener(v->{stopService(new Intent(this,BubbleService.class));Toast.makeText(this,"تم إيقاف فقاعة التسبيح",Toast.LENGTH_SHORT).show();});box.addView(stop,lp(-1,dp(58),0,dp(10),0,0));Button reset=secondary("تصفير العداد");reset.setOnClickListener(v->{p.edit().putInt("tasbih",0).apply();count.setText("0");});box.addView(reset,lp(-1,dp(58),0,dp(10),0,0));showPanel("المسبحة",box); }
 
-    void showQibla(){ double[] ll=currentLatLon(this); double bearing=qibla(ll[0],ll[1]); String dir=String.format(Locale.US,"اتجاه القبلة من الشمال: %.1f°\n\nاستخدم بوصلة الهاتف واتجه للزاوية المذكورة. يمكنك تحديث الموقع من GPS.",bearing); new AlertDialog.Builder(this).setTitle("القبلة").setMessage(dir).setPositiveButton("استخدام GPS",(d,w)->useGps()).setNegativeButton("إغلاق",null).show(); }
-    static double qibla(double lat,double lon){ double kaLat=Math.toRadians(21.4225), kaLon=Math.toRadians(39.8262), la=Math.toRadians(lat), lo=Math.toRadians(lon); double y=Math.sin(kaLon-lo), x=Math.cos(la)*Math.tan(kaLat)-Math.sin(la)*Math.cos(kaLon-lo); return (Math.toDegrees(Math.atan2(y,x))+360)%360; }
+    void requestBubble(){ if(Build.VERSION.SDK_INT>=23&&!Settings.canDrawOverlays(this)){pendingBubble=true;try{startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,Uri.parse("package:"+getPackageName())));}catch(Exception e){startActivity(new Intent(Settings.ACTION_SETTINGS));}return;}startBubble(); }
+    void startBubble(){Intent i=new Intent(this,BubbleService.class);if(Build.VERSION.SDK_INT>=26)startForegroundService(i);else startService(i);Toast.makeText(this,"فقاعة التسبيح تعمل الآن",Toast.LENGTH_SHORT).show();}
 
-    void useGps(){
-        if(Build.VERSION.SDK_INT>=23 && checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)!=PackageManager.PERMISSION_GRANTED){ requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION,Manifest.permission.ACCESS_COARSE_LOCATION},44); return; }
-        try{
-            LocationManager lm=(LocationManager)getSystemService(LOCATION_SERVICE); Location best=null;
-            for(String pr:lm.getProviders(true)){ Location l=lm.getLastKnownLocation(pr); if(l!=null&&(best==null||l.getAccuracy()<best.getAccuracy()))best=l; }
-            if(best!=null){ getSharedPreferences(PREF,MODE_PRIVATE).edit().putFloat("lat",(float)best.getLatitude()).putFloat("lon",(float)best.getLongitude()).putString("city","GPS").apply(); scheduleAll(this); refreshHeader(); Toast.makeText(this,"تم اعتماد موقع الجهاز",Toast.LENGTH_SHORT).show(); }
-            else Toast.makeText(this,"فعّل GPS وحاول مجدداً",Toast.LENGTH_LONG).show();
-        }catch(Exception e){ Toast.makeText(this,"تعذر الوصول للموقع",Toast.LENGTH_SHORT).show(); }
-    }
-    @Override public void onRequestPermissionsResult(int r,String[] p,int[] g){ super.onRequestPermissionsResult(r,p,g); if(r==44&&g.length>0&&g[0]==PackageManager.PERMISSION_GRANTED)useGps(); }
+    void showQibla(){ double[]ll=currentLatLon(this);double bearing=qibla(ll[0],ll[1]);LinearLayout box=col();box.setGravity(Gravity.CENTER);box.addView(txt("اتجاه القبلة",20,GREEN,true,Gravity.CENTER));box.addView(txt(String.format(Locale.US,"%.1f°",bearing),46,GOLD,true,Gravity.CENTER));box.addView(txt("من اتجاه الشمال. استخدم بوصلة الهاتف واتجه لهذه الزاوية، ويمكن تحديث الموقع من GPS.",15,TEXT,false,Gravity.CENTER));Button gps=primary("تحديث موقعي GPS");gps.setOnClickListener(v->useGps());box.addView(gps,lp(-1,dp(58),0,dp(16),0,0));showPanel("القبلة",box); }
+    static double qibla(double lat,double lon){double kaLat=Math.toRadians(21.4225),kaLon=Math.toRadians(39.8262),la=Math.toRadians(lat),lo=Math.toRadians(lon);double y=Math.sin(kaLon-lo),x=Math.cos(la)*Math.tan(kaLat)-Math.sin(la)*Math.cos(kaLon-lo);return(Math.toDegrees(Math.atan2(y,x))+360)%360;}
 
-    void showSettings(){
-        SharedPreferences p=getSharedPreferences(PREF,MODE_PRIVATE); ScrollView sc=new ScrollView(this); LinearLayout box=new LinearLayout(this); box.setOrientation(LinearLayout.VERTICAL); box.setPadding(dp(16),dp(8),dp(16),dp(8)); sc.addView(box);
-        box.addView(text("المدينة",14,TEXT,true)); Spinner city=new Spinner(this); String[] names=CITIES.keySet().toArray(new String[0]); city.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,names)); int ix=Arrays.asList(names).indexOf(p.getString("city","طرابلس")); city.setSelection(Math.max(ix,0)); box.addView(city);
-        Switch full=new Switch(this); full.setText("تشغيل الأذان كاملاً عند دخول الوقت"); full.setChecked(p.getBoolean("fullAdhan",true)); box.addView(full);
-        Switch vib=new Switch(this); vib.setText("الاهتزاز مع التنبيهات"); vib.setChecked(p.getBoolean("vibrate",true)); box.addView(vib);
-        box.addView(text("التنبيه قبل الصلاة بالدقائق",14,TEXT,true)); EditText pre=new EditText(this); pre.setInputType(2); pre.setText(String.valueOf(p.getInt("pre",10))); pre.setGravity(Gravity.CENTER); box.addView(pre);
-        box.addView(text("تذكير «هل صليت؟» بعد الصلاة بالدقائق",14,TEXT,true)); EditText post=new EditText(this); post.setInputType(2); post.setText(String.valueOf(p.getInt("post",20))); post.setGravity(Gravity.CENTER); box.addView(post);
-        Button audio=button("اختيار ملف أذان للصلوات"); audio.setOnClickListener(v->pickAudio(71)); addSettingButton(box,audio);
-        Button fajr=button("اختيار ملف أذان خاص بالفجر"); fajr.setOnClickListener(v->pickAudio(72)); addSettingButton(box,fajr);
-        Button offs=button("تعديل دقائق كل صلاة ±"); offs.setOnClickListener(v->showOffsets()); addSettingButton(box,offs);
-        Button exact=button("السماح بالتنبيهات الدقيقة"); exact.setOnClickListener(v->requestExact()); addSettingButton(box,exact);
-        Button gps=button("اعتماد موقعي GPS"); gps.setOnClickListener(v->useGps()); addSettingButton(box,gps);
-        Button test=button("اختبار الأذان الآن"); test.setOnClickListener(v->{Intent i=new Intent(this,AdhanService.class).putExtra("prayer","اختبار الأذان").putExtra("mode","PRAYER"); if(Build.VERSION.SDK_INT>=26)startForegroundService(i);else startService(i);}); addSettingButton(box,test);
-        new AlertDialog.Builder(this).setTitle("إعدادات أَقِم").setView(sc).setPositiveButton("حفظ",(d,w)->{
-            int prev=number(pre.getText().toString(),10), postv=number(post.getText().toString(),20); String selected=(String)city.getSelectedItem();
-            SharedPreferences.Editor ed=p.edit().putString("city",selected).putBoolean("fullAdhan",full.isChecked()).putBoolean("vibrate",vib.isChecked()).putInt("pre",Math.max(0,prev)).putInt("post",Math.max(0,postv));
-            double[]ll=CITIES.get(selected); if(ll!=null)ed.putFloat("lat",(float)ll[0]).putFloat("lon",(float)ll[1]); ed.apply(); scheduleAll(this); refreshHeader();
-        }).setNegativeButton("إلغاء",null).show();
-    }
-    void addSettingButton(LinearLayout box,Button b){ LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,dp(60)); p.setMargins(0,dp(8),0,0); box.addView(b,p); }
+    void showSettings(){ SharedPreferences p=getSharedPreferences(PREF,MODE_PRIVATE);ScrollView sc=new ScrollView(this);LinearLayout box=col();box.setPadding(dp(4),dp(4),dp(4),dp(16));sc.addView(box);final String[] city={p.getString("city","طرابلس")};Button cityB=secondary("المدينة: "+city[0]);cityB.setOnClickListener(v->{List<String>names=new ArrayList<>(CITIES.keySet());int i=names.indexOf(city[0]);city[0]=names.get((i+1+names.size())%names.size());cityB.setText("المدينة: "+city[0]);});box.addView(cityB,lp(-1,dp(58),0,dp(4),0,0));final boolean[] full={p.getBoolean("fullAdhan",true)}, vib={p.getBoolean("vibrate",true)};Button fullB=secondary(toggle("الأذان الكامل",full[0]));fullB.setOnClickListener(v->{full[0]=!full[0];fullB.setText(toggle("الأذان الكامل",full[0]));});box.addView(fullB,lp(-1,dp(58),0,dp(8),0,0));Button vibB=secondary(toggle("الاهتزاز",vib[0]));vibB.setOnClickListener(v->{vib[0]=!vib[0];vibB.setText(toggle("الاهتزاز",vib[0]));});box.addView(vibB,lp(-1,dp(58),0,dp(8),0,0));
+        box.addView(txt("تنبيه قبل الصلاة بالدقائق",14,TEXT,true,Gravity.RIGHT));EditText pre=input(String.valueOf(p.getInt("pre",10)));box.addView(pre,lp(-1,dp(56),0,dp(4),0,dp(8)));box.addView(txt("تذكير «هل صليت؟» بعد الصلاة",14,TEXT,true,Gravity.RIGHT));EditText post=input(String.valueOf(p.getInt("post",20)));box.addView(post,lp(-1,dp(56),0,dp(4),0,dp(8)));
+        Button adhan=secondary("صوت الأذان: "+audioName(p.getString("adhanChoice","default")));adhan.setOnClickListener(v->showAudioChoices(false));box.addView(adhan,lp(-1,dp(58),0,dp(8),0,0));Button fajr=secondary("أذان الفجر: "+audioName(p.getString("fajrChoice",p.getString("adhanChoice","default"))));fajr.setOnClickListener(v->showAudioChoices(true));box.addView(fajr,lp(-1,dp(58),0,dp(8),0,0));
+        Button offs=secondary("تعديل دقائق الصلوات ±");offs.setOnClickListener(v->showOffsets());box.addView(offs,lp(-1,dp(58),0,dp(8),0,0));Button exact=secondary("السماح بالتنبيهات الدقيقة");exact.setOnClickListener(v->requestExact());box.addView(exact,lp(-1,dp(58),0,dp(8),0,0));Button gps=secondary("اعتماد موقعي GPS");gps.setOnClickListener(v->useGps());box.addView(gps,lp(-1,dp(58),0,dp(8),0,0));Button test=primary("اختبار الأذان الآن");test.setOnClickListener(v->testAdhan());box.addView(test,lp(-1,dp(58),0,dp(10),0,0));Button save=primary("حفظ الإعدادات");save.setOnClickListener(v->{String selected=city[0];SharedPreferences.Editor ed=p.edit().putString("city",selected).putBoolean("fullAdhan",full[0]).putBoolean("vibrate",vib[0]).putInt("pre",Math.max(0,num(pre.getText().toString(),10))).putInt("post",Math.max(0,num(post.getText().toString(),20)));double[]xy=CITIES.get(selected);if(xy!=null)ed.putFloat("lat",(float)xy[0]).putFloat("lon",(float)xy[1]);ed.apply();scheduleAll(this);refreshHeader();Toast.makeText(this,"تم حفظ الإعدادات",Toast.LENGTH_SHORT).show();closePanel();});box.addView(save,lp(-1,dp(58),0,dp(12),0,0));showPanel("الإعدادات",sc); }
+    String toggle(String s,boolean on){return s+": "+(on?"مفعّل":"متوقف");}
+    EditText input(String s){EditText e=new EditText(this);e.setText(s);e.setTextSize(16);e.setTextColor(TEXT);e.setGravity(Gravity.CENTER);e.setTypeface(cairo);e.setInputType(android.text.InputType.TYPE_CLASS_NUMBER|android.text.InputType.TYPE_NUMBER_FLAG_SIGNED);e.setBackground(round(IVORY,16));e.setPadding(dp(10),0,dp(10),0);return e;}
 
-    void showOffsets(){
-        String[] ps={"الفجر","الظهر","العصر","المغرب","العشاء"}; int[] keys={0,2,3,5,6}; LinearLayout box=new LinearLayout(this); box.setOrientation(LinearLayout.VERTICAL); EditText[] es=new EditText[5]; SharedPreferences p=getSharedPreferences(PREF,MODE_PRIVATE);
-        for(int i=0;i<5;i++){ LinearLayout row=new LinearLayout(this); row.setGravity(Gravity.CENTER_VERTICAL); es[i]=new EditText(this); es[i].setInputType(android.text.InputType.TYPE_CLASS_NUMBER|android.text.InputType.TYPE_NUMBER_FLAG_SIGNED); es[i].setText(String.valueOf(p.getInt("off"+keys[i],0))); es[i].setGravity(Gravity.CENTER); row.addView(text(ps[i],15,TEXT,true),new LinearLayout.LayoutParams(0,dp(52),1)); row.addView(es[i],new LinearLayout.LayoutParams(dp(90),dp(52))); box.addView(row); }
-        new AlertDialog.Builder(this).setTitle("تعديل المواقيت بالدقائق").setView(box).setPositiveButton("حفظ",(d,w)->{SharedPreferences.Editor ed=p.edit(); for(int i=0;i<5;i++)ed.putInt("off"+keys[i],number(es[i].getText().toString(),0)); ed.apply(); scheduleAll(this); refreshHeader();}).setNegativeButton("إلغاء",null).show();
-    }
-    int number(String s,int def){try{return Integer.parseInt(s.trim());}catch(Exception e){return def;}}
+    void showAudioChoices(boolean fajr){LinearLayout box=col();box.addView(txt("اختر صوتاً مدمجاً أو ملفاً من هاتفك",15,MUTED,false,Gravity.CENTER));addAudio(box,"الافتراضي الخفيف • CC0","default",fajr);addAudio(box,"أذان تقليدي • CC BY-SA 4.0","classic",fajr);addAudio(box,"أذان المسجد الحرام – مكة 2013 • CC BY 3.0","mecca2013",fajr);Button custom=primary("اختيار ملف أذان من الهاتف");custom.setOnClickListener(v->{getSharedPreferences(PREF,MODE_PRIVATE).edit().putString(fajr?"fajrChoice":"adhanChoice","custom").apply();pickAudio(fajr?72:71);closePanel();});box.addView(custom,lp(-1,dp(58),0,dp(10),0,0));showPanel(fajr?"اختيار أذان الفجر":"اختيار صوت الأذان",box); }
+    void addAudio(LinearLayout box,String label,String key,boolean fajr){Button b=secondary(label);b.setOnClickListener(v->{getSharedPreferences(PREF,MODE_PRIVATE).edit().putString(fajr?"fajrChoice":"adhanChoice",key).apply();Toast.makeText(this,"تم اعتماد "+audioName(key),Toast.LENGTH_SHORT).show();closePanel();});box.addView(b,lp(-1,dp(62),0,dp(8),0,0));}
+    String audioName(String key){if("classic".equals(key))return"أذان تقليدي";if("mecca2013".equals(key))return"المسجد الحرام – مكة 2013";if("custom".equals(key))return"ملف من الهاتف";return"الافتراضي";}
 
-    void pickAudio(int req){ Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT); i.setType("audio/*"); i.addCategory(Intent.CATEGORY_OPENABLE); startActivityForResult(i,req); }
-    @Override protected void onActivityResult(int r,int c,Intent data){ super.onActivityResult(r,c,data); if(c==RESULT_OK&&data!=null&&data.getData()!=null&&(r==71||r==72)){ Uri u=data.getData(); try{getContentResolver().takePersistableUriPermission(u,Intent.FLAG_GRANT_READ_URI_PERMISSION);}catch(Exception ignored){} getSharedPreferences(PREF,MODE_PRIVATE).edit().putString(r==71?"adhanUri":"fajrUri",u.toString()).apply(); Toast.makeText(this,"تم حفظ ملف الأذان",Toast.LENGTH_SHORT).show(); } }
+    void showOffsets(){SharedPreferences p=getSharedPreferences(PREF,MODE_PRIVATE);String[]ps={"الفجر","الظهر","العصر","المغرب","العشاء"};int[]keys={0,2,3,5,6};ScrollView sc=new ScrollView(this);LinearLayout box=col();EditText[]es=new EditText[5];for(int i=0;i<5;i++){LinearLayout row=new LinearLayout(this);row.setGravity(Gravity.CENTER_VERTICAL);row.setPadding(dp(4),dp(4),dp(4),dp(4));es[i]=input(String.valueOf(p.getInt("off"+keys[i],0)));row.addView(txt(ps[i],15,TEXT,true,Gravity.RIGHT),new LinearLayout.LayoutParams(0,dp(54),1));row.addView(es[i],new LinearLayout.LayoutParams(dp(100),dp(54)));box.addView(row);}Button save=primary("حفظ التعديلات");save.setOnClickListener(v->{SharedPreferences.Editor ed=p.edit();for(int i=0;i<5;i++)ed.putInt("off"+keys[i],num(es[i].getText().toString(),0));ed.apply();scheduleAll(this);refreshHeader();closePanel();});box.addView(save,lp(-1,dp(58),0,dp(12),0,0));sc.addView(box);showPanel("تعديل المواقيت بالدقائق",sc); }
 
-    void requestExact(){ if(Build.VERSION.SDK_INT>=31){ AlarmManager am=(AlarmManager)getSystemService(ALARM_SERVICE); if(!am.canScheduleExactAlarms()){ try{startActivity(new Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,Uri.parse("package:"+getPackageName())));}catch(Exception e){startActivity(new Intent(Settings.ACTION_SETTINGS));} } else Toast.makeText(this,"التنبيهات الدقيقة مفعلة",Toast.LENGTH_SHORT).show(); } else Toast.makeText(this,"لا يحتاج جهازك إذناً إضافياً",Toast.LENGTH_SHORT).show(); }
-    void requestNotifications(){ if(Build.VERSION.SDK_INT>=33&&checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED) requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},55); }
+    void showAbout(){ScrollView sc=new ScrollView(this);LinearLayout box=col();box.setGravity(Gravity.CENTER_HORIZONTAL);box.addView(txt("أَقِم",34,GREEN,true,Gravity.CENTER));box.addView(txt("مؤذن ليبيا ومواقيت الصلاة\nالإصدار 1.2.0",16,TEXT,false,Gravity.CENTER));box.addView(txt("تصميم وتطوير\nأحمد شهبون\n0921984045",18,GREEN,true,Gravity.CENTER));box.addView(txt("مصادر الأصوات المدمجة:\n• Muslim calling to prayer — CC0 1.0\n• Azan.ogg — Andrewler — CC BY-SA 4.0\n• Adhan, Great Mosque of Mecca (2013) — Seyfula Islam — CC BY 3.0\n\nخط Cairo من Google Fonts — SIL Open Font License.\n\nالشعار الرسمي لم يُعتمد بعد.",13,MUTED,false,Gravity.CENTER));sc.addView(box);showPanel("حول أَقِم",sc); }
 
-    void showAbout(){ String msg="أَقِم – مؤذن ليبيا ومواقيت الصلاة\nالإصدار 1.1.0\n\nتصميم وتطوير:\nأحمد شهبون\n0921984045\n\nتطبيق مجاني للصلاة والذكر.\n\nالتسجيل الافتراضي للأذان: Wikimedia Commons – Muslim calling to prayer – CC0 1.0.\n\nالشعار الرسمي غير معتمد بعد وسيتم وضعه بعد اعتماد المطور."; new AlertDialog.Builder(this).setTitle("حول أَقِم").setMessage(msg).setPositiveButton("إغلاق",null).show(); }
+    void testAdhan(){Intent i=new Intent(this,AdhanService.class).putExtra("prayer","اختبار الأذان").putExtra("mode","PRAYER");if(Build.VERSION.SDK_INT>=26)startForegroundService(i);else startService(i);}
+    void pickAudio(int req){Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);i.setType("audio/*");i.addCategory(Intent.CATEGORY_OPENABLE);startActivityForResult(i,req);}
+    @Override protected void onActivityResult(int r,int c,Intent data){super.onActivityResult(r,c,data);if(c==RESULT_OK&&data!=null&&data.getData()!=null&&(r==71||r==72)){Uri u=data.getData();try{getContentResolver().takePersistableUriPermission(u,Intent.FLAG_GRANT_READ_URI_PERMISSION);}catch(Exception ignored){}getSharedPreferences(PREF,MODE_PRIVATE).edit().putString(r==71?"adhanUri":"fajrUri",u.toString()).putString(r==71?"adhanChoice":"fajrChoice","custom").apply();Toast.makeText(this,"تم حفظ ملف الأذان",Toast.LENGTH_SHORT).show();}}
+    void requestExact(){if(Build.VERSION.SDK_INT>=31){AlarmManager am=(AlarmManager)getSystemService(ALARM_SERVICE);if(!am.canScheduleExactAlarms()){try{startActivity(new Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,Uri.parse("package:"+getPackageName())));}catch(Exception e){startActivity(new Intent(Settings.ACTION_SETTINGS));}}else Toast.makeText(this,"التنبيهات الدقيقة مفعلة",Toast.LENGTH_SHORT).show();}else Toast.makeText(this,"جهازك لا يحتاج إذناً إضافياً",Toast.LENGTH_SHORT).show();}
+    void requestNotifications(){if(Build.VERSION.SDK_INT>=33&&checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},55);}
 
-    static double[] currentLatLon(Context c){ SharedPreferences p=c.getSharedPreferences(PREF,MODE_PRIVATE); String city=p.getString("city","طرابلس"); if("GPS".equals(city))return new double[]{p.getFloat("lat",32.8872f),p.getFloat("lon",13.1913f)}; double[] ll=CITIES.get(city); return ll!=null?ll:new double[]{32.8872,13.1913}; }
-    static int[] offsets(Context c){ SharedPreferences p=c.getSharedPreferences(PREF,MODE_PRIVATE); int[] o=new int[7]; for(int i=0;i<7;i++)o[i]=p.getInt("off"+i,0); return o; }
-    static LinkedHashMap<String,Calendar> todayTimes(Context c){ return timesFor(c,Calendar.getInstance(TimeZone.getTimeZone("Africa/Tripoli"))); }
-    static LinkedHashMap<String,Calendar> timesFor(Context c,Calendar day){ double[]ll=currentLatLon(c); return PrayerTimes.calculate(day,ll[0],ll[1],offsets(c)); }
+    void useGps(){if(Build.VERSION.SDK_INT>=23&&checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)!=PackageManager.PERMISSION_GRANTED){requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION,Manifest.permission.ACCESS_COARSE_LOCATION},44);return;}try{LocationManager lm=(LocationManager)getSystemService(LOCATION_SERVICE);Location best=null;for(String pr:lm.getProviders(true)){Location l=lm.getLastKnownLocation(pr);if(l!=null&&(best==null||l.getAccuracy()<best.getAccuracy()))best=l;}if(best!=null){getSharedPreferences(PREF,MODE_PRIVATE).edit().putFloat("lat",(float)best.getLatitude()).putFloat("lon",(float)best.getLongitude()).putString("city","GPS").apply();scheduleAll(this);refreshHeader();Toast.makeText(this,"تم اعتماد موقع الجهاز",Toast.LENGTH_SHORT).show();}else Toast.makeText(this,"فعّل GPS وحاول مجدداً",Toast.LENGTH_LONG).show();}catch(Exception e){Toast.makeText(this,"تعذر الوصول للموقع",Toast.LENGTH_SHORT).show();}}
+    @Override public void onRequestPermissionsResult(int r,String[]p,int[]g){super.onRequestPermissionsResult(r,p,g);if(r==44&&g.length>0&&g[0]==PackageManager.PERMISSION_GRANTED)useGps();}
+    int num(String s,int d){try{return Integer.parseInt(s.trim());}catch(Exception e){return d;}}
 
-    public static void scheduleAll(Context c){
-        try{
-            AlarmManager am=(AlarmManager)c.getSystemService(ALARM_SERVICE); SharedPreferences p=c.getSharedPreferences(PREF,MODE_PRIVATE); int pre=p.getInt("pre",10), post=p.getInt("post",20); Calendar base=Calendar.getInstance(TimeZone.getTimeZone("Africa/Tripoli")); int request=10000;
-            for(int day=0;day<4;day++){ Calendar d=(Calendar)base.clone(); d.add(Calendar.DAY_OF_MONTH,day); LinkedHashMap<String,Calendar> times=timesFor(c,d);
-                for(Map.Entry<String,Calendar> e:times.entrySet()){ String name=e.getKey(); if("الشروق".equals(name)||"الغروب".equals(name))continue; Calendar at=e.getValue(); if(at.getTimeInMillis()<=System.currentTimeMillis())continue;
-                    scheduleOne(c,am,at.getTimeInMillis(),request++,name,"PRAYER"); if(pre>0)scheduleOne(c,am,at.getTimeInMillis()-pre*60000L,request++,name,"PRE"); if(post>0)scheduleOne(c,am,at.getTimeInMillis()+post*60000L,request++,name,"POST");
-                }
-            }
-        }catch(Exception ignored){}
-    }
-    static void scheduleOne(Context c,AlarmManager am,long when,int request,String prayer,String mode){
-        if(when<=System.currentTimeMillis())return; Intent i=new Intent(c,AdhanService.class).putExtra("prayer",prayer).putExtra("mode",mode);
-        PendingIntent pi=Build.VERSION.SDK_INT>=26?PendingIntent.getForegroundService(c,request,i,PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE):PendingIntent.getService(c,request,i,PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
-        try{ if(Build.VERSION.SDK_INT>=31&&am.canScheduleExactAlarms())am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP,when,pi); else if(Build.VERSION.SDK_INT>=23)am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP,when,pi); else am.setExact(AlarmManager.RTC_WAKEUP,when,pi); } catch(Exception ex){ am.set(AlarmManager.RTC_WAKEUP,when,pi); }
-    }
+    void refreshHeader(){if(nextPrayer==null)return;SharedPreferences p=getSharedPreferences(PREF,MODE_PRIVATE);String city=p.getString("city","طرابلس");locationLabel.setText("الموقع: "+city+" • توقيت ليبيا");LinkedHashMap<String,Calendar>times=todayTimes(this);Calendar now=Calendar.getInstance(TimeZone.getTimeZone("Africa/Tripoli"));String found=null;Calendar when=null;for(Map.Entry<String,Calendar>e:times.entrySet()){if("الشروق".equals(e.getKey())||"الغروب".equals(e.getKey()))continue;if(e.getValue().after(now)){found=e.getKey();when=e.getValue();break;}}if(found==null){Calendar tm=(Calendar)now.clone();tm.add(Calendar.DAY_OF_MONTH,1);found="الفجر";when=timesFor(this,tm).get("الفجر");}long ms=Math.max(0,when.getTimeInMillis()-now.getTimeInMillis()),h=ms/3600000,m=(ms%3600000)/60000;nextPrayer.setText("الصلاة القادمة: "+found+"  "+PrayerTimes.format(when));countdown.setText(String.format(Locale.US,"باقي %02d:%02d",h,m));}
+
+    static double[] currentLatLon(Context c){SharedPreferences p=c.getSharedPreferences(PREF,MODE_PRIVATE);String city=p.getString("city","طرابلس");if("GPS".equals(city))return new double[]{p.getFloat("lat",32.8872f),p.getFloat("lon",13.1913f)};double[]ll=CITIES.get(city);return ll!=null?ll:new double[]{32.8872,13.1913};}
+    static int[] offsets(Context c){SharedPreferences p=c.getSharedPreferences(PREF,MODE_PRIVATE);int[]o=new int[7];for(int i=0;i<7;i++)o[i]=p.getInt("off"+i,0);return o;}
+    static LinkedHashMap<String,Calendar> todayTimes(Context c){return timesFor(c,Calendar.getInstance(TimeZone.getTimeZone("Africa/Tripoli")));}
+    static LinkedHashMap<String,Calendar> timesFor(Context c,Calendar day){double[]ll=currentLatLon(c);return PrayerTimes.calculate(day,ll[0],ll[1],offsets(c));}
+
+    public static void scheduleAll(Context c){try{AlarmManager am=(AlarmManager)c.getSystemService(ALARM_SERVICE);SharedPreferences p=c.getSharedPreferences(PREF,MODE_PRIVATE);int pre=p.getInt("pre",10),post=p.getInt("post",20);Calendar base=Calendar.getInstance(TimeZone.getTimeZone("Africa/Tripoli"));int request=10000;for(int day=0;day<4;day++){Calendar d=(Calendar)base.clone();d.add(Calendar.DAY_OF_MONTH,day);LinkedHashMap<String,Calendar>times=timesFor(c,d);for(Map.Entry<String,Calendar>e:times.entrySet()){String name=e.getKey();if("الشروق".equals(name)||"الغروب".equals(name))continue;Calendar at=e.getValue();if(at.getTimeInMillis()<=System.currentTimeMillis())continue;scheduleOne(c,am,at.getTimeInMillis(),request++,name,"PRAYER");if(pre>0)scheduleOne(c,am,at.getTimeInMillis()-pre*60000L,request++,name,"PRE");if(post>0)scheduleOne(c,am,at.getTimeInMillis()+post*60000L,request++,name,"POST");}}}catch(Exception ignored){}}
+    static void scheduleOne(Context c,AlarmManager am,long when,int request,String prayer,String mode){if(when<=System.currentTimeMillis())return;Intent i=new Intent(c,AdhanService.class).putExtra("prayer",prayer).putExtra("mode",mode);PendingIntent pi=Build.VERSION.SDK_INT>=26?PendingIntent.getForegroundService(c,request,i,PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE):PendingIntent.getService(c,request,i,PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);try{if(Build.VERSION.SDK_INT>=31&&am.canScheduleExactAlarms())am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP,when,pi);else if(Build.VERSION.SDK_INT>=23)am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP,when,pi);else am.setExact(AlarmManager.RTC_WAKEUP,when,pi);}catch(Exception ex){am.set(AlarmManager.RTC_WAKEUP,when,pi);}}
 }
