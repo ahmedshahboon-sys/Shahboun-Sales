@@ -1,0 +1,47 @@
+name: Sign AQIM Update APK
+
+on:
+  workflow_run:
+    workflows: ["Build Aqim Unsigned APK"]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  sign:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: android-actions/setup-android@v3
+      - run: sdkmanager "build-tools;36.0.0"
+      - name: Download unsigned build
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          if [ -z "$RUN_ID" ]; then RUN_ID=$(gh run list -R "$GITHUB_REPOSITORY" -w "Build Aqim Unsigned APK" -s success -L 1 --json databaseId -q '.[0].databaseId'); fi
+          gh run download "$RUN_ID" -R "$GITHUB_REPOSITORY" -n AQIM-v1.5.0-build-kit -D input
+          test -f input/AQIM-v1.5.0-unsigned.apk
+      - name: Restore key and verify certificate
+        run: |
+          curl -L --fail --retry 3 "https://raw.githubusercontent.com/ahmedshahboon-sys/shahboun-build/main/Aqim/keystore.b64" -o keystore.b64
+          base64 -d keystore.b64 > aqim-release.jks
+          KEY_SHA256=$(keytool -list -v -keystore aqim-release.jks -storepass 'AqimShahboun2026!' -alias aqim | sed -n 's/^[[:space:]]*SHA256: //p' | head -1)
+          echo "AQIM key SHA256: $KEY_SHA256"
+          test "$KEY_SHA256" = "B3:02:2C:87:39:E8:27:DD:B2:87:14:0D:DF:9D:A4:10:1C:1F:DC:B1:A7:06:4E:40:22:57:FF:CB:D7:2E:6D:A5"
+      - name: Sign APK
+        run: |
+          mkdir -p output
+          "$ANDROID_HOME/build-tools/36.0.0/zipalign" -f -p 4 input/AQIM-v1.5.0-unsigned.apk output/aligned.apk
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" sign --ks aqim-release.jks --ks-key-alias aqim --ks-pass pass:'AqimShahboun2026!' --key-pass pass:'AqimShahboun2026!' --out output/AQIM-v1.5.0-SIGNED-UPDATE.apk output/aligned.apk
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs output/AQIM-v1.5.0-SIGNED-UPDATE.apk
+          rm -f output/aligned.apk aqim-release.jks keystore.b64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AQIM-v1.5.0-SIGNED-UPDATE
+          path: output/AQIM-v1.5.0-SIGNED-UPDATE.apk
+          retention-days: 30
