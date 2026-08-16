@@ -1,0 +1,185 @@
+name: Shahboun Windows 6.0.2 Repair Build
+
+on:
+  push:
+    branches: [suite-6.0.2-repair]
+    paths:
+      - '.github/workflows/windows-602-repair.yml'
+      - '.ci-staging/windows/source.min.b64.*'
+      - '.ci-clean/windows/**'
+      - '.ci-assets/official-logo.b64.*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verified-windows:
+    runs-on: windows-2025
+    timeout-minutes: 100
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Restore and verify canonical Windows source
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $parts=Get-ChildItem '.ci-staging/windows/source.min.b64.*' | Sort-Object Name
+          if($parts.Count -ne 2){ throw "WINDOWS_SOURCE_PART_COUNT_$($parts.Count)" }
+          $raw=($parts | ForEach-Object { Get-Content $_.FullName -Raw }) -join ''
+          $b64=[regex]::Replace($raw,'[^A-Za-z0-9+/=]','')
+          $rem=$b64.Length % 4
+          if($rem -eq 1){ throw 'WINDOWS_SOURCE_BASE64_IRRECOVERABLE' }
+          if($rem -gt 0){ $b64 += '=' * (4-$rem) }
+          $archive=Join-Path $env:RUNNER_TEMP 'shahboun-source.tar.xz'
+          [IO.File]::WriteAllBytes($archive,[Convert]::FromBase64String($b64))
+          $hash=(Get-FileHash $archive -Algorithm SHA256).Hash.ToLower()
+          Write-Host "source sha256=$hash"
+          if($hash -ne 'edefedb3373ca0b3b4eb5160a6f356388da44e2523be2fe5ffc12aa2ff27f5b0'){ throw "WINDOWS_SOURCE_SHA256_MISMATCH_$hash" }
+          $extract=Join-Path $env:RUNNER_TEMP 'shahboun-win-src'
+          New-Item -ItemType Directory -Force $extract | Out-Null
+          tar -tf $archive | Select-Object -First 20
+          if($LASTEXITCODE -ne 0){ throw 'WINDOWS_SOURCE_ARCHIVE_INVALID' }
+          tar -xf $archive -C $extract
+          if($LASTEXITCODE -ne 0){ throw 'WINDOWS_SOURCE_EXTRACT_FAILED' }
+          $root=Join-Path $extract 'Shahboun_Server_Web_Windows'
+          if(!(Test-Path "$root\package.json")){ throw 'WINDOWS_SOURCE_PACKAGE_JSON_MISSING' }
+          if(!(Test-Path "$root\package-lock.json")){ throw 'WINDOWS_SOURCE_LOCK_MISSING' }
+          Remove-Item apps/windows-current -Recurse -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force apps/windows-current | Out-Null
+          Get-ChildItem $root -Force | Copy-Item -Destination apps/windows-current -Recurse -Force
+
+      - name: Apply repair overrides and preserve installer identity
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          Get-ChildItem '.ci-clean/windows/overrides' -Force | Copy-Item -Destination apps/windows-current -Recurse -Force
+          $iss='apps/windows-current/installer/ShahbounServerSetup.iss'
+          $text=Get-Content $iss -Raw
+          if($text -notmatch 'AppId=\{\{A4F09936-4B15-49E2-A9D6-42F4EAF55601\}'){ throw 'WINDOWS_APPID_NOT_PRESERVED' }
+          $text=$text -replace '#define MyAppVersion "6\.0\.1"','#define MyAppVersion "6.0.2"'
+          $text=$text -replace 'OutputBaseFilename=Shahboun_Server_Setup_6\.0\.1','OutputBaseFilename=Shahboun_Server_Setup_6.0.2'
+          Set-Content $iss $text -Encoding UTF8
+          foreach($f in @('BOOTSTRAP_PREREQUISITES.ps1','FIRST_RUN_SETUP.ps1','INSTALL_SERVER_AUTOSTART.ps1')){
+            $tokens=$null;$errors=$null
+            [void][Management.Automation.Language.Parser]::ParseFile((Resolve-Path "apps/windows-current/scripts/$f"),[ref]$tokens,[ref]$errors)
+            if($errors.Count){ throw "POWERSHELL_SYNTAX_ERROR_$f" }
+          }
+
+      - name: Restore approved Shahboun logo
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $parts=Get-ChildItem '.ci-assets/official-logo.b64.*' | Sort-Object Name
+          $raw=($parts | ForEach-Object { Get-Content $_.FullName -Raw }) -join ''
+          $b64=[regex]::Replace($raw,'[^A-Za-z0-9+/=]','')
+          $rem=$b64.Length % 4; if($rem -gt 0){$b64 += '='*(4-$rem)}
+          $src=Join-Path $env:RUNNER_TEMP 'official-logo.jpg'
+          [IO.File]::WriteAllBytes($src,[Convert]::FromBase64String($b64))
+          choco install imagemagick -y --no-progress
+          $m=(Get-Command magick.exe).Source
+          New-Item -ItemType Directory -Force apps/windows-current/public/assets,apps/windows-current/installer | Out-Null
+          & $m $src -auto-orient -strip 'PNG32:apps/windows-current/public/assets/shahboun-logo.png'
+          Copy-Item apps/windows-current/public/assets/shahboun-logo.png apps/windows-current/public/assets/logo.png -Force
+          Copy-Item apps/windows-current/public/assets/shahboun-logo.png apps/windows-current/public/assets/icon.png -Force
+          & $m apps/windows-current/public/assets/shahboun-logo.png -define icon:auto-resize=256,128,64,48,32,16 apps/windows-current/installer/shahboun.ico
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '20.19.4'
+
+      - name: Verify application source and licensing rules
+        working-directory: apps/windows-current
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          npm ci --no-audit --no-fund
+          npm run verify:syntax
+          @'
+          DB_HOST=127.0.0.1
+          DB_PORT=54329
+          DB_NAME=shahboun_lan
+          DB_USER=postgres
+          DB_PASSWORD=build_check_only
+          JWT_SECRET=build_check_only
+          TRIAL_HOURS=24
+          TRIAL_MAX_DEVICES=5
+          '@ | Set-Content .env -Encoding ASCII
+          npm run check:final
+          npm run acceptance
+          Remove-Item .env -Force
+          $first=Get-Content scripts/FIRST_RUN_SETUP.ps1 -Raw
+          if($first -notmatch 'DB_PORT=54329'){ throw 'DB_PORT_54329_MISSING' }
+          if($first -notmatch 'TRIAL_HOURS=24'){ throw 'TRIAL_24H_MISSING' }
+
+      - name: Keep production dependencies
+        working-directory: apps/windows-current
+        run: npm prune --omit=dev
+
+      - name: Bundle portable Node runtime
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          Invoke-WebRequest 'https://nodejs.org/dist/v20.19.4/node-v20.19.4-win-x64.zip' -OutFile "$env:RUNNER_TEMP\node.zip"
+          Expand-Archive "$env:RUNNER_TEMP\node.zip" "$env:RUNNER_TEMP\node" -Force
+          New-Item -ItemType Directory -Force apps/windows-current/runtime/node | Out-Null
+          Copy-Item "$env:RUNNER_TEMP\node\node-v20.19.4-win-x64\*" apps/windows-current/runtime/node -Recurse -Force
+          if((& apps/windows-current/runtime/node/node.exe --version) -ne 'v20.19.4'){ throw 'BUNDLED_NODE_INVALID' }
+
+      - name: Bundle PostgreSQL installer
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          New-Item -ItemType Directory -Force apps/windows-current/runtime | Out-Null
+          $dest='apps/windows-current/runtime/postgresql-17.11-1-windows-x64.exe'
+          Invoke-WebRequest 'https://get.enterprisedb.com/postgresql/postgresql-17.11-1-windows-x64.exe' -OutFile $dest -MaximumRedirection 10
+          if((Get-Item $dest).Length -lt 100MB){ throw 'POSTGRESQL_PAYLOAD_INVALID' }
+
+      - name: Compile Setup EXE
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          choco install innosetup -y --no-progress
+          $iscc=@("${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe","$env:ProgramFiles\Inno Setup 6\ISCC.exe") | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if(!$iscc){ throw 'ISCC_MISSING' }
+          Push-Location apps/windows-current/installer
+          & $iscc ShahbounServerSetup.iss
+          if($LASTEXITCODE -ne 0){ throw 'INNO_BUILD_FAILED' }
+          Pop-Location
+          $setup='apps/windows-current/installer/Output/Shahboun_Server_Setup_6.0.2.exe'
+          if(!(Test-Path $setup)){ throw 'SETUP_NOT_PRODUCED' }
+          if((Get-Item $setup).Length -lt 100MB){ throw 'SETUP_TOO_SMALL' }
+
+      - name: Execute installer and smoke-test installed system
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $setup=(Resolve-Path 'apps/windows-current/installer/Output/Shahboun_Server_Setup_6.0.2.exe').Path
+          $install=Join-Path $env:RUNNER_TEMP 'ShahbounInstalled602'
+          $log=Join-Path $env:RUNNER_TEMP 'setup602.log'
+          $p=Start-Process $setup -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=$install", "/LOG=$log") -Wait -PassThru
+          if($p.ExitCode -ne 0){ Get-Content $log -ErrorAction SilentlyContinue; throw "SETUP_FAILED_$($p.ExitCode)" }
+          foreach($f in @('.env','runtime\node\node.exe','node_modules\express\package.json','public\assets\shahboun-logo.png')){ if(!(Test-Path (Join-Path $install $f))){ throw "INSTALLED_FILE_MISSING_$f" } }
+          $server=Start-Process -FilePath (Join-Path $install 'runtime\node\node.exe') -ArgumentList 'src\server.js' -WorkingDirectory $install -WindowStyle Hidden -PassThru
+          try {
+            $ok=$false
+            for($i=0;$i -lt 60;$i++){ Start-Sleep 2; try{$r=Invoke-RestMethod 'http://127.0.0.1:3000/api/health' -TimeoutSec 3;if($r.ok -eq $true){$ok=$true;break}}catch{} }
+            if(!$ok){ throw 'INSTALLED_SERVER_HEALTH_FAILED' }
+          } finally { if($server -and !$server.HasExited){Stop-Process -Id $server.Id -Force -ErrorAction SilentlyContinue} }
+
+      - name: Package verified release
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist-windows | Out-Null
+          $setup='apps/windows-current/installer/Output/Shahboun_Server_Setup_6.0.2.exe'
+          Copy-Item $setup dist-windows/Shahboun_Server_Setup_6.0.2.exe -Force
+          $h=(Get-FileHash $setup -Algorithm SHA256).Hash.ToLower()
+          "$h  Shahboun_Server_Setup_6.0.2.exe" | Set-Content dist-windows/Shahboun_Server_Setup_6.0.2.exe.sha256 -Encoding ASCII
+          'INSTALLER_EXECUTED=true`nHEALTH_CHECK=true`nAPP_ID=A4F09936-4B15-49E2-A9D6-42F4EAF55601' | Set-Content dist-windows/VERIFICATION.txt -Encoding ASCII
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Shahboun-Windows-Setup-6.0.2-VERIFIED
+          path: dist-windows/
+          if-no-files-found: error
+          retention-days: 30
