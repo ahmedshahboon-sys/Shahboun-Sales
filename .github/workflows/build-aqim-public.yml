@@ -35,18 +35,20 @@ jobs:
           curl -L --fail --retry 3 "https://upload.wikimedia.org/wikipedia/commons/a/a9/Muslim_calling_to_prayer.ogg" -o AqimBuild/app/src/main/res/raw/adhan_default.ogg
           curl -L --fail --retry 3 "https://commons.wikimedia.org/wiki/Special:Redirect/file/Azan.ogg" -o AqimBuild/app/src/main/res/raw/adhan_classic.ogg
           curl -L --fail --retry 3 "https://commons.wikimedia.org/wiki/Special:Redirect/file/Adhan%2C%20Great%20Mosque%20of%20Mecca%20-%20Jan%2021%2C%202013.webm" -o AqimBuild/app/src/main/res/raw/adhan_mecca_2013.webm
+          curl -L --fail --retry 3 "https://commons.wikimedia.org/wiki/Special:Redirect/file/33937%20ejaz215%20call-to-prayer-from-the-prophet-s-mo.ogg" -o AqimBuild/app/src/main/res/raw/adhan_prophet_mosque.ogg
+          curl -L --fail --retry 3 "https://commons.wikimedia.org/wiki/Special:Redirect/file/Call_to_prayer.ogg" -o AqimBuild/app/src/main/res/raw/adhan_africa.ogg
       - name: Build unsigned release APK
         working-directory: AqimBuild
         run: gradle --no-daemon :app:assembleRelease
       - name: Prepare APK and official signer
         run: |
           mkdir -p output
-          cp AqimBuild/app/build/outputs/apk/release/app-release-unsigned.apk output/AQIM-v1.2.0-unsigned.apk
+          cp AqimBuild/app/build/outputs/apk/release/app-release-unsigned.apk output/AQIM-v1.3.0-unsigned.apk
           cp "$ANDROID_HOME/build-tools/36.0.0/lib/apksigner.jar" output/apksigner.jar
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: AQIM-v1.2.0-build-kit
+          name: AQIM-v1.3.0-build-kit
           path: output/
           if-no-files-found: error
           retention-days: 30
