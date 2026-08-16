@@ -27,7 +27,7 @@ jobs:
           $parts=Get-ChildItem '.ci-staging/windows/source.min.b64.*' | Sort-Object Name
           if($parts.Count -ne 2){ throw "WINDOWS_SOURCE_PART_COUNT_$($parts.Count)" }
           $raw=($parts | ForEach-Object { Get-Content $_.FullName -Raw }) -join ''
-          $b64=[regex]::Replace($raw,'[^A-Za-z0-9+/=]','')
+          $b64=[regex]::Replace($raw,'[^A-Za-z0-9+/]','')
           $rem=$b64.Length % 4
           if($rem -eq 1){ throw 'WINDOWS_SOURCE_BASE64_IRRECOVERABLE' }
           if($rem -gt 0){ $b64 += '=' * (4-$rem) }
@@ -72,8 +72,9 @@ jobs:
           $ErrorActionPreference='Stop'
           $parts=Get-ChildItem '.ci-assets/official-logo.b64.*' | Sort-Object Name
           $raw=($parts | ForEach-Object { Get-Content $_.FullName -Raw }) -join ''
-          $b64=[regex]::Replace($raw,'[^A-Za-z0-9+/=]','')
-          $rem=$b64.Length % 4; if($rem -gt 0){$b64 += '='*(4-$rem)}
+          $b64=[regex]::Replace($raw,'[^A-Za-z0-9+/]','')
+          $rem=$b64.Length % 4
+          if($rem -gt 0){$b64 += '='*(4-$rem)}
           $src=Join-Path $env:RUNNER_TEMP 'official-logo.jpg'
           [IO.File]::WriteAllBytes($src,[Convert]::FromBase64String($b64))
           choco install imagemagick -y --no-progress
