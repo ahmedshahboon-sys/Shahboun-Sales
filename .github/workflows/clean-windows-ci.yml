@@ -5,8 +5,6 @@ on:
     branches: [suite-6.0.1-clean]
     paths:
       - '.github/workflows/clean-windows-ci.yml'
-      - '.ci-clean/windows/**'
-      - '.ci-assets/official-logo.b64.*'
   workflow_dispatch:
 
 permissions:
@@ -23,29 +21,25 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference='Stop'
-          $parts=Get-ChildItem '.ci-clean/windows/source.b64.*' | Sort-Object Name
-          if($parts.Count -lt 4){ throw 'WINDOWS_SOURCE_PARTS_MISSING' }
-          $raw=($parts | ForEach-Object { Get-Content $_.FullName -Raw }) -join ''
-          $b64=[regex]::Replace($raw,'[^A-Za-z0-9+/=]','')
-          $rem=$b64.Length % 4
-          if($rem -eq 1){ throw "WINDOWS_SOURCE_BASE64_IRRECOVERABLE_$($b64.Length)" }
-          if($rem -gt 0){ $b64 += '=' * (4-$rem) }
-          $archive=Join-Path $env:RUNNER_TEMP 'shahboun-source.tar.xz'
+          $parts=Get-ChildItem '.ci-staging/windows/source.min.b64.*' | Sort-Object Name
+          if($parts.Count -ne 2){ throw "WINDOWS_CLEAN_SOURCE_PART_COUNT_$($parts.Count)" }
+          $b64=($parts | ForEach-Object { Get-Content $_.FullName -Raw }) -join ''
+          $archive=Join-Path $env:RUNNER_TEMP 'shahboun-clean-source.tar.xz'
           [IO.File]::WriteAllBytes($archive,[Convert]::FromBase64String($b64))
-          if((Get-Item $archive).Length -lt 10000){ throw 'WINDOWS_SOURCE_ARCHIVE_TOO_SMALL' }
+          $hash=(Get-FileHash $archive -Algorithm SHA256).Hash.ToLower()
+          if($hash -ne 'edefedb3373ca0b3b4eb5160a6f356388da44e2523be2fe5ffc12aa2ff27f5b0'){ throw "WINDOWS_CLEAN_SOURCE_SHA256_MISMATCH_$hash" }
           $extract=Join-Path $env:RUNNER_TEMP 'shahboun-source'
           New-Item -ItemType Directory -Force $extract | Out-Null
           tar -tf $archive | Select-Object -First 10
-          if($LASTEXITCODE -ne 0){ throw 'WINDOWS_SOURCE_ARCHIVE_INVALID' }
+          if($LASTEXITCODE -ne 0){ throw 'WINDOWS_CLEAN_SOURCE_ARCHIVE_INVALID' }
           tar -xf $archive -C $extract
-          if($LASTEXITCODE -ne 0){ throw 'WINDOWS_SOURCE_EXTRACT_FAILED' }
-          $pkg=Get-ChildItem $extract -Recurse -Filter package.json | Where-Object { $_.FullName -notmatch 'node_modules' } | Select-Object -First 1
-          if(!$pkg){ throw 'WINDOWS_SOURCE_PACKAGE_JSON_NOT_FOUND' }
-          $root=$pkg.Directory.FullName
+          if($LASTEXITCODE -ne 0){ throw 'WINDOWS_CLEAN_SOURCE_EXTRACT_FAILED' }
+          $root=Join-Path $extract 'Shahboun_Server_Web_Windows'
+          if(!(Test-Path (Join-Path $root 'package.json'))){ throw 'WINDOWS_CLEAN_SOURCE_PACKAGE_JSON_NOT_FOUND' }
+          if(!(Test-Path (Join-Path $root 'package-lock.json'))){ throw 'WINDOWS_CLEAN_SOURCE_PACKAGE_LOCK_MISSING' }
           Remove-Item apps/windows-current -Recurse -Force -ErrorAction SilentlyContinue
           New-Item -ItemType Directory -Force apps/windows-current | Out-Null
           Get-ChildItem $root -Force | Copy-Item -Destination apps/windows-current -Recurse -Force
-          if(!(Test-Path apps/windows-current/package-lock.json)){ throw 'WINDOWS_PACKAGE_LOCK_MISSING' }
 
       - name: Apply clean release overrides
         shell: pwsh
