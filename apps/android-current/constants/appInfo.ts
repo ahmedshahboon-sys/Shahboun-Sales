@@ -4,9 +4,9 @@ export const APP_BRAND = {
   /** اسم البرنامج الرسمي — لا يتغير أبدًا من الإعدادات */
   name: 'منظومة شهبون للمبيعات',
   /** المصدر الوحيد لرقم الإصدار داخل الواجهة (مطابق لـ app.json) */
-  version: '1.1.0',
+  version: '6.0.1',
   /** معرف الحزمة النهائي المعتمد */
   packageName: 'com.shahboun.sales',
   /** شعار منظومة شهبون الثابت (أيقونة/سبلاش/شاشات البرنامج) */
-  logo: require('../assets/images/shahboun-icon.png'),
+  logo: require('../assets/images/official-logo.png'),
 } as const;
