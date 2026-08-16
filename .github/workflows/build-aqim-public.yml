@@ -35,14 +35,15 @@ jobs:
       - name: Build unsigned release APK
         working-directory: AqimBuild
         run: gradle --no-daemon :app:assembleRelease
-      - name: Prepare APK
+      - name: Prepare APK and official signer
         run: |
           mkdir -p output
           cp AqimBuild/app/build/outputs/apk/release/app-release-unsigned.apk output/AQIM-v1.1.0-unsigned.apk
+          cp "$ANDROID_HOME/build-tools/36.0.0/lib/apksigner.jar" output/apksigner.jar
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: AQIM-v1.1.0-unsigned
-          path: output/AQIM-v1.1.0-unsigned.apk
+          name: AQIM-v1.1.0-build-kit
+          path: output/
           if-no-files-found: error
           retention-days: 30
