@@ -46,40 +46,16 @@ jobs:
           curl -L --fail --retry 3 "https://commons.wikimedia.org/wiki/Special:Redirect/file/33937%20ejaz215%20call-to-prayer-from-the-prophet-s-mo.ogg" -o AqimBuild/app/src/main/res/raw/adhan_prophet_mosque.ogg
           curl -L --fail --retry 3 "https://commons.wikimedia.org/wiki/Special:Redirect/file/Call_to_prayer.ogg" -o AqimBuild/app/src/main/res/raw/adhan_africa.ogg
           echo '/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAAgACADASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwDx+iiimfPBRRRQAUUUUAFFFFAH/9k=' | base64 -d > AqimBuild/app/src/main/res/drawable/aqim_logo.jpg
-      - name: Validate sacred text assets
+      - name: Inspect Quran schema
         run: |
           python3 - <<'PY'
-          import json,glob,hashlib,os
+          import json,glob,os
           for f in glob.glob('AqimBuild/app/src/main/assets/quran/*.json'):
-              with open(f,encoding='utf-8') as h: d=json.load(h)
-              assert isinstance(d,list) and len(d)>6000, (f,len(d))
-              suras={int(x['sura_no']) for x in d}
-              assert suras==set(range(1,115)), (f,len(suras),min(suras),max(suras))
-              for x in d:
-                  assert 'aya_no' in x and 'aya_text' in x and str(x['aya_text']).strip()
-              print(os.path.basename(f),len(d),hashlib.sha256(open(f,'rb').read()).hexdigest())
-          PY
-      - name: Patch global timezone and version labels
-        run: |
-          python3 - <<'PY'
-          p='AqimBuild/app/src/main/java/com/shahboun/aqim/MainActivity.java'
-          s=open(p,encoding='utf-8').read()
-          s=s.replace('TimeZone.getTimeZone("Africa/Tripoli")','TimeZone.getTimeZone(c.getSharedPreferences(PREF,MODE_PRIVATE).getString("tzId","Africa/Tripoli"))')
-          s=s.replace('الإصدار 1.3.0','الإصدار 1.4.0').replace('أَقِم – مؤذن ليبيا ومواقيت الصلاة','أَقِم – الصلاة والذكر والقرآن')
-          open(p,'w',encoding='utf-8').write(s)
+              d=json.load(open(f,encoding='utf-8'))
+              print('FILE',os.path.basename(f),'TYPE',type(d).__name__,'LEN',len(d))
+              for x in d[:3]: print('ROW',x)
+          raise SystemExit(1)
           PY
       - name: Build unsigned release APK
         working-directory: AqimBuild
         run: gradle --no-daemon :app:assembleRelease
-      - name: Prepare APK and official signer
-        run: |
-          mkdir -p output
-          cp AqimBuild/app/build/outputs/apk/release/app-release-unsigned.apk output/AQIM-v1.4.0-unsigned.apk
-          cp "$ANDROID_HOME/build-tools/36.0.0/lib/apksigner.jar" output/apksigner.jar
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: AQIM-v1.4.0-build-kit
-          path: output/
-          if-no-files-found: error
-          retention-days: 30
