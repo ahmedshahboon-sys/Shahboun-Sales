@@ -11,11 +11,18 @@
   <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
   <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
   <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+  <uses-permission android:name="android.permission.INTERNET" />
 
-  <application android:allowBackup="true" android:label="أَقِم" android:supportsRtl="true" android:theme="@style/AppTheme">
-    <activity android:name=".MainActivity" android:screenOrientation="unspecified" android:exported="true">
+  <application android:allowBackup="true" android:label="أَقِم" android:icon="@drawable/aqim_logo" android:roundIcon="@drawable/aqim_logo" android:supportsRtl="true" android:theme="@style/AppTheme">
+    <activity android:name=".DashboardActivity" android:screenOrientation="unspecified" android:exported="true">
       <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
     </activity>
+    <activity android:name=".MainActivity" android:screenOrientation="unspecified" android:exported="false" />
+    <activity android:name=".QuranActivity" android:screenOrientation="unspecified" android:exported="false" />
+    <activity android:name=".IbadatiActivity" android:screenOrientation="unspecified" android:exported="false" />
+    <activity android:name=".WorldLocationActivity" android:screenOrientation="unspecified" android:exported="false" />
+    <activity android:name=".LiveQiblaActivity" android:screenOrientation="unspecified" android:exported="false" />
+    <activity android:name=".DhikrSettingsActivity" android:screenOrientation="unspecified" android:exported="false" />
 
     <service android:name=".AdhanService" android:exported="false" android:foregroundServiceType="mediaPlayback" />
     <service android:name=".BubbleService" android:exported="false" android:foregroundServiceType="specialUse">
@@ -34,6 +41,7 @@
     </receiver>
     <receiver android:name=".PrayerActionReceiver" android:exported="false" />
     <receiver android:name=".PrayerQuestionReceiver" android:exported="false" />
+    <receiver android:name=".DhikrReminderReceiver" android:exported="false" />
     <receiver android:name=".PrayerWidget" android:exported="true">
       <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
       <meta-data android:name="android.appwidget.provider" android:resource="@xml/aqim_widget_info" />
