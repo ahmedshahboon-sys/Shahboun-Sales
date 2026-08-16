@@ -25,7 +25,9 @@ jobs:
           $ErrorActionPreference='Stop'
           $parts=Get-ChildItem '.ci-clean/windows/source.b64.*' | Sort-Object Name
           if($parts.Count -lt 4){ throw 'WINDOWS_SOURCE_PARTS_MISSING' }
-          $b64=($parts | ForEach-Object { Get-Content $_.FullName -Raw }) -join ''
+          $raw=($parts | ForEach-Object { Get-Content $_.FullName -Raw }) -join ''
+          $b64=[regex]::Replace($raw,'[^A-Za-z0-9+/=]','')
+          if(($b64.Length % 4) -ne 0){ throw "WINDOWS_SOURCE_BASE64_LENGTH_INVALID_$($b64.Length)" }
           $archive=Join-Path $env:RUNNER_TEMP 'shahboun-source.tar.xz'
           [IO.File]::WriteAllBytes($archive,[Convert]::FromBase64String($b64))
           if((Get-Item $archive).Length -lt 10000){ throw 'WINDOWS_SOURCE_ARCHIVE_TOO_SMALL' }
@@ -58,7 +60,8 @@ jobs:
           $ErrorActionPreference='Stop'
           $logoParts=Get-ChildItem '.ci-assets/official-logo.b64.*' | Sort-Object Name
           if(!$logoParts){ throw 'OFFICIAL_LOGO_PARTS_MISSING' }
-          $b64=($logoParts | ForEach-Object { Get-Content $_.FullName -Raw }) -join ''
+          $raw=($logoParts | ForEach-Object { Get-Content $_.FullName -Raw }) -join ''
+          $b64=[regex]::Replace($raw,'[^A-Za-z0-9+/=]','')
           $src=Join-Path $env:RUNNER_TEMP 'official-logo.jpg'
           [IO.File]::WriteAllBytes($src,[Convert]::FromBase64String($b64))
           choco install imagemagick -y --no-progress
