@@ -61,7 +61,6 @@ public class AdhanService extends Service {
             volumeReceiverRegistered=true;
         }catch(Exception ignored){}
     }
-
     private void unregisterVolumeStop(){
         if(!volumeReceiverRegistered)return;
         try{unregisterReceiver(volumeReceiver);}catch(Exception ignored){}
@@ -73,14 +72,14 @@ public class AdhanService extends Service {
         if(!p.getBoolean("fullAdhan",true)){ stopAdhan(); return; }
         p.edit().putBoolean("adhanPlaying",true).apply();
         boolean fajr="الفجر".equals(prayer);
-        String choice=fajr?p.getString("fajrChoice",p.getString("adhanChoice","mecca2013")):p.getString("adhanChoice","mecca2013");
+        String choice=fajr?p.getString("fajrChoice",p.getString("adhanChoice","yasser_aldosari")):p.getString("adhanChoice","yasser_aldosari");
         String custom=fajr?p.getString("fajrUri",""):p.getString("adhanUri","");
         try{
             if("custom".equals(choice)&&custom!=null&&!custom.isEmpty()){
                 player=new MediaPlayer(); player.setDataSource(this,Uri.parse(custom));
                 player.setAudioAttributes(new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build()); player.prepare();
             }else{
-                int res=resourceFor(choice); if(res==0)res=getResources().getIdentifier("adhan_default","raw",getPackageName());
+                int res=resourceFor(choice);
                 player=res!=0?MediaPlayer.create(this,res):MediaPlayer.create(this,RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM));
                 if(player!=null)player.setAudioAttributes(new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build());
             }
@@ -89,11 +88,21 @@ public class AdhanService extends Service {
         }catch(Exception e){ finishPlaying(); }
     }
     private int resourceFor(String choice){
-        if("classic".equals(choice))return getResources().getIdentifier("adhan_classic","raw",getPackageName());
-        if("prophet".equals(choice))return getResources().getIdentifier("adhan_prophet_mosque","raw",getPackageName());
-        if("africa".equals(choice))return getResources().getIdentifier("adhan_africa","raw",getPackageName());
-        if("default".equals(choice))return getResources().getIdentifier("adhan_default","raw",getPackageName());
-        return getResources().getIdentifier("adhan_mecca_2013","raw",getPackageName());
+        String raw;
+        if("abdelrahman_alqodai".equals(choice)) raw="adhan_abdelrahman_alqodai";
+        else if("islam_sobhi".equals(choice)) raw="adhan_islam_sobhi";
+        else if("omar_hisham".equals(choice)) raw="adhan_omar_hisham";
+        else if("nasser_alqatami".equals(choice)) raw="adhan_nasser_alqatami";
+        else raw="adhan_yasser_aldosari";
+        return getResources().getIdentifier(raw,"raw",getPackageName());
+    }
+    public static String labelFor(String choice){
+        if("abdelrahman_alqodai".equals(choice))return "عبدالرحمن القضاعي";
+        if("islam_sobhi".equals(choice))return "إسلام صبحي";
+        if("omar_hisham".equals(choice))return "عمر هشام العربي";
+        if("nasser_alqatami".equals(choice))return "ناصر القطامي";
+        if("custom".equals(choice))return "ملف من الهاتف";
+        return "ياسر الدوسري";
     }
     private void finishPlaying(){ unregisterVolumeStop(); getSharedPreferences("aqim",MODE_PRIVATE).edit().putBoolean("adhanPlaying",false).apply(); try{stopForeground(STOP_FOREGROUND_REMOVE);}catch(Exception ignored){} stopSelf(); }
     private void stopAdhan(){ if(player!=null){try{player.stop();}catch(Exception ignored){} try{player.release();}catch(Exception ignored){} player=null;} finishPlaying(); }
