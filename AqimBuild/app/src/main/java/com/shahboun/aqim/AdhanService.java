@@ -10,7 +10,14 @@ public class AdhanService extends Service {
     public static final String ACTION_STOP = "com.shahboun.aqim.STOP_ADHAN";
     private static final String CH_ADHAN = "aqim_adhan";
     private static final String CH_REM = "aqim_reminders";
+    private static final String ACTION_VOLUME_CHANGED = "android.media.VOLUME_CHANGED_ACTION";
     private MediaPlayer player;
+    private boolean volumeReceiverRegistered=false;
+    private final BroadcastReceiver volumeReceiver=new BroadcastReceiver(){
+        @Override public void onReceive(Context context,Intent intent){
+            if(intent!=null&&ACTION_VOLUME_CHANGED.equals(intent.getAction())&&getSharedPreferences("aqim",MODE_PRIVATE).getBoolean("adhanPlaying",false)) stopAdhan();
+        }
+    };
 
     @Override public void onCreate() {
         super.onCreate();
@@ -38,9 +45,27 @@ public class AdhanService extends Service {
         Intent stop=new Intent(this,AdhanService.class).setAction(ACTION_STOP);
         PendingIntent stopPi=Build.VERSION.SDK_INT>=26?PendingIntent.getForegroundService(this,991,stop,PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE):PendingIntent.getService(this,991,stop,PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
         Notification n=nb(CH_ADHAN).setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
-                .setContentTitle(test?"اختبار أذان أَقِم":"أَقِم • حان وقت "+prayer).setContentText("إيقاف من الإشعار أو زر الصوت بعد تفعيل الخدمة")
+                .setContentTitle(test?"اختبار أذان أَقِم":"أَقِم • حان وقت "+prayer).setContentText("يمكن إيقاف الأذان من الإشعار أو بزر رفع/خفض الصوت أثناء التشغيل")
                 .setOngoing(true).setCategory(Notification.CATEGORY_ALARM).addAction(0,"إيقاف الأذان",stopPi).build();
-        startForeground(1001,n); play(prayer); return START_NOT_STICKY;
+        startForeground(1001,n);
+        registerVolumeStop();
+        play(prayer);
+        return START_NOT_STICKY;
+    }
+
+    private void registerVolumeStop(){
+        if(volumeReceiverRegistered)return;
+        try{
+            IntentFilter f=new IntentFilter(ACTION_VOLUME_CHANGED);
+            if(Build.VERSION.SDK_INT>=33)registerReceiver(volumeReceiver,f,Context.RECEIVER_NOT_EXPORTED);else registerReceiver(volumeReceiver,f);
+            volumeReceiverRegistered=true;
+        }catch(Exception ignored){}
+    }
+
+    private void unregisterVolumeStop(){
+        if(!volumeReceiverRegistered)return;
+        try{unregisterReceiver(volumeReceiver);}catch(Exception ignored){}
+        volumeReceiverRegistered=false;
     }
 
     private void play(String prayer){
@@ -70,8 +95,8 @@ public class AdhanService extends Service {
         if("default".equals(choice))return getResources().getIdentifier("adhan_default","raw",getPackageName());
         return getResources().getIdentifier("adhan_mecca_2013","raw",getPackageName());
     }
-    private void finishPlaying(){ getSharedPreferences("aqim",MODE_PRIVATE).edit().putBoolean("adhanPlaying",false).apply(); try{stopForeground(STOP_FOREGROUND_REMOVE);}catch(Exception ignored){} stopSelf(); }
+    private void finishPlaying(){ unregisterVolumeStop(); getSharedPreferences("aqim",MODE_PRIVATE).edit().putBoolean("adhanPlaying",false).apply(); try{stopForeground(STOP_FOREGROUND_REMOVE);}catch(Exception ignored){} stopSelf(); }
     private void stopAdhan(){ if(player!=null){try{player.stop();}catch(Exception ignored){} try{player.release();}catch(Exception ignored){} player=null;} finishPlaying(); }
-    @Override public void onDestroy(){ getSharedPreferences("aqim",MODE_PRIVATE).edit().putBoolean("adhanPlaying",false).apply(); if(player!=null){try{player.stop();player.release();}catch(Exception ignored){} player=null;} super.onDestroy(); }
+    @Override public void onDestroy(){ unregisterVolumeStop(); getSharedPreferences("aqim",MODE_PRIVATE).edit().putBoolean("adhanPlaying",false).apply(); if(player!=null){try{player.stop();player.release();}catch(Exception ignored){} player=null;} super.onDestroy(); }
     @Override public android.os.IBinder onBind(Intent i){return null;}
 }
