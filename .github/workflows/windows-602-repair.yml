@@ -32,7 +32,11 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference='Stop'
-          $archive=Resolve-Path 'legacy/.ci-assets/windows-source-6.0.1.tgz'
+          $encoded=Resolve-Path 'legacy/.ci-assets/windows-source-6.0.1.tgz'
+          $raw=Get-Content $encoded -Raw
+          $b64=[regex]::Replace($raw,'[^A-Za-z0-9+/=]','')
+          $archive=Join-Path $env:RUNNER_TEMP 'windows-source-6.0.1.tgz'
+          [IO.File]::WriteAllBytes($archive,[Convert]::FromBase64String($b64))
           $extract=Join-Path $env:RUNNER_TEMP 'shahboun-win-src'
           Remove-Item $extract -Recurse -Force -ErrorAction SilentlyContinue
           New-Item -ItemType Directory -Force $extract | Out-Null
