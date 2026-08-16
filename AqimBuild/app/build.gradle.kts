@@ -1,3 +1,5 @@
+import java.util.Base64
+
 plugins { id("com.android.application") }
 
 android {
@@ -21,7 +23,7 @@ val prepareOfficialAqimLogo by tasks.registering {
         drawableDir.mkdirs()
         file("src/main/res/drawable/aqim_logo.xml").delete()
         file("src/main/res/drawable/aqim_logo.webp").writeBytes(
-            java.util.Base64.getDecoder().decode(payload.readText().trim())
+            Base64.getDecoder().decode(payload.readText().trim())
         )
     }
 }
