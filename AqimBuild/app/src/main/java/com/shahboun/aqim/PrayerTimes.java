@@ -7,17 +7,11 @@ import java.util.TimeZone;
 
 public final class PrayerTimes {
     private PrayerTimes() {}
-
-    // Calibration against the current prayer timetable published by Libya's
-    // General Authority of Awqaf for Tripoli on 2026-08-16:
-    // Fajr +7, Sunrise -1, Dhuhr +3, Asr -1, Sunset/Maghrib +3, Isha +4.
-    // User offsets are applied on top of this calibration.
     private static final int[] LIBYA_CAL = {7,-1,3,-1,3,3,4};
 
     public static LinkedHashMap<String, Calendar> calculate(Calendar date, double lat, double lon, int[] offsets) {
-        TimeZone tz = TimeZone.getTimeZone("Africa/Tripoli");
-        Calendar day = (Calendar) date.clone();
-        day.setTimeZone(tz);
+        TimeZone tz = date != null && date.getTimeZone() != null ? date.getTimeZone() : TimeZone.getDefault();
+        Calendar day = (Calendar) date.clone(); day.setTimeZone(tz);
         int y = day.get(Calendar.YEAR), m = day.get(Calendar.MONTH) + 1, d = day.get(Calendar.DAY_OF_MONTH);
         double jd = julian(y, m, d) - lon / (15.0 * 24.0);
         double[] t = {5, 6, 12, 13, 18, 18, 18};
@@ -34,18 +28,14 @@ public final class PrayerTimes {
         }
         double zone = tz.getOffset(day.getTimeInMillis()) / 3600000.0;
         for (int i = 0; i < t.length; i++) t[i] = fixHour(t[i] + zone - lon / 15.0);
-
         String[] names = {"الفجر", "الشروق", "الظهر", "العصر", "الغروب", "المغرب", "العشاء"};
         LinkedHashMap<String, Calendar> out = new LinkedHashMap<>();
+        boolean libya = "Africa/Tripoli".equals(tz.getID());
         for (int i = 0; i < names.length; i++) {
-            Calendar c = Calendar.getInstance(tz, Locale.US);
-            c.clear(); c.set(y, m - 1, d, 0, 0, 0);
-            int hour = (int)Math.floor(t[i]);
-            int min = (int)Math.round((t[i] - hour) * 60.0);
-            if (min >= 60) { hour++; min -= 60; }
-            c.set(Calendar.HOUR_OF_DAY, ((hour % 24) + 24) % 24);
-            c.set(Calendar.MINUTE, min);
-            c.add(Calendar.MINUTE, LIBYA_CAL[i]);
+            Calendar c = Calendar.getInstance(tz, Locale.US); c.clear(); c.set(y, m - 1, d, 0, 0, 0);
+            int hour = (int)Math.floor(t[i]); int min = (int)Math.round((t[i] - hour) * 60.0); if (min >= 60) { hour++; min -= 60; }
+            c.set(Calendar.HOUR_OF_DAY, ((hour % 24) + 24) % 24); c.set(Calendar.MINUTE, min);
+            if (libya) c.add(Calendar.MINUTE, LIBYA_CAL[i]);
             if (offsets != null && i < offsets.length) c.add(Calendar.MINUTE, offsets[i]);
             out.put(names[i], c);
         }
@@ -53,7 +43,6 @@ public final class PrayerTimes {
     }
 
     public static String format(Calendar c) { return String.format(Locale.US, "%02d:%02d", c.get(Calendar.HOUR_OF_DAY), c.get(Calendar.MINUTE)); }
-
     private static double julian(int y, int m, int d) { if (m <= 2) { y -= 1; m += 12; } int a = y / 100; int b = 2 - a + a / 4; return Math.floor(365.25 * (y + 4716)) + Math.floor(30.6001 * (m + 1)) + d + b - 1524.5; }
     private static double[] sunPosition(double jd) { double D = jd - 2451545.0; double g = fixAngle(357.529 + 0.98560028 * D); double q = fixAngle(280.459 + 0.98564736 * D); double L = fixAngle(q + 1.915 * sin(g) + 0.020 * sin(2 * g)); double e = 23.439 - 0.00000036 * D; double decl = arcsin(sin(e) * sin(L)); double ra = arctan2(cos(e) * sin(L), cos(L)) / 15.0; ra = fixHour(ra); return new double[]{decl, q / 15.0 - ra}; }
     private static double midDay(double jd, double time) { return fixHour(12 - sunPosition(jd + time)[1]); }
