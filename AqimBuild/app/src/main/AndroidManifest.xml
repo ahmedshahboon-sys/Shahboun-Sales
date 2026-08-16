@@ -25,6 +25,8 @@
     <activity android:name=".StrongFajrSettingsActivity" android:screenOrientation="unspecified" android:exported="false" />
     <activity android:name=".IslamicToolsActivity" android:screenOrientation="unspecified" android:exported="false" />
     <activity android:name=".StandbyActivity" android:screenOrientation="unspecified" android:exported="false" />
+    <activity android:name=".HisnActivity" android:screenOrientation="unspecified" android:exported="false" />
+    <activity android:name=".NamesOfAllahActivity" android:screenOrientation="unspecified" android:exported="false" />
     <activity android:name=".AboutActivity" android:screenOrientation="unspecified" android:exported="false" />
 
     <service android:name=".AdhanService" android:exported="false" android:foregroundServiceType="mediaPlayback" />
