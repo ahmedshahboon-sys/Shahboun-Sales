@@ -47,19 +47,29 @@ public class AdhanService extends Service {
     private void play(String prayer) {
         SharedPreferences p = getSharedPreferences("aqim", MODE_PRIVATE);
         if (!p.getBoolean("fullAdhan", true)) { stopForeground(STOP_FOREGROUND_REMOVE); stopSelf(); return; }
-        String uriText = "الفجر".equals(prayer) ? p.getString("fajrUri", "") : p.getString("adhanUri", "");
+        boolean fajr = "الفجر".equals(prayer);
+        String choice = fajr ? p.getString("fajrChoice", p.getString("adhanChoice","default")) : p.getString("adhanChoice","default");
+        String uriText = fajr ? p.getString("fajrUri", "") : p.getString("adhanUri", "");
         try {
-            if (uriText != null && !uriText.isEmpty()) {
+            if ("custom".equals(choice) && uriText != null && !uriText.isEmpty()) {
                 player = new MediaPlayer(); player.setDataSource(this, Uri.parse(uriText));
                 player.setAudioAttributes(new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build()); player.prepare();
             } else {
-                int res = getResources().getIdentifier("adhan_default", "raw", getPackageName());
-                if (res != 0) player = MediaPlayer.create(this, res);
-                else player = MediaPlayer.create(this, RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM));
+                int res = resourceFor(choice);
+                if (res == 0) res = getResources().getIdentifier("adhan_default", "raw", getPackageName());
+                player = res != 0 ? MediaPlayer.create(this, res) : MediaPlayer.create(this, RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM));
             }
-            if (player != null) { player.setOnCompletionListener(mp -> { mp.release(); player=null; stopForeground(STOP_FOREGROUND_REMOVE); stopSelf(); }); player.start(); }
-            else { stopForeground(STOP_FOREGROUND_REMOVE); stopSelf(); }
+            if (player != null) {
+                player.setAudioAttributes(new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build());
+                player.setOnCompletionListener(mp -> { mp.release(); player=null; stopForeground(STOP_FOREGROUND_REMOVE); stopSelf(); }); player.start();
+            } else { stopForeground(STOP_FOREGROUND_REMOVE); stopSelf(); }
         } catch (Exception e) { stopForeground(STOP_FOREGROUND_REMOVE); stopSelf(); }
+    }
+
+    private int resourceFor(String choice){
+        if("classic".equals(choice)) return getResources().getIdentifier("adhan_classic","raw",getPackageName());
+        if("mecca2013".equals(choice)) return getResources().getIdentifier("adhan_mecca_2013","raw",getPackageName());
+        return getResources().getIdentifier("adhan_default","raw",getPackageName());
     }
 
     @Override public void onDestroy(){ if(player!=null){try{player.stop();}catch(Exception ignored){} player.release(); player=null;} super.onDestroy(); }
