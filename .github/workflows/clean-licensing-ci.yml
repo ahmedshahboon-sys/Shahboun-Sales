@@ -14,7 +14,7 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-24.04
-    timeout-minutes: 40
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -24,7 +24,6 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-
       - name: Verify canonical identity and approved branding
         shell: bash
         run: |
@@ -32,19 +31,16 @@ jobs:
           grep -Fq "com.shahboun.licensing" apps/licensing-current/app.config.js
           grep -Fq "versionCode: 61" apps/licensing-current/app.config.js
           grep -Fq "9d835e52-7b7d-4a08-83a6-b21ad88b066c" apps/licensing-current/app.config.js
-          test -f apps/licensing-current/assets/official-logo.png
-          test "$(git hash-object apps/licensing-current/assets/icon.png)" = "$(git hash-object apps/licensing-current/assets/official-logo.png)"
-          test "$(git hash-object apps/licensing-current/assets/adaptive-icon.png)" = "$(git hash-object apps/licensing-current/assets/official-logo.png)"
-          test "$(git hash-object apps/licensing-current/assets/splash.png)" = "$(git hash-object apps/licensing-current/assets/official-logo.png)"
-
+          test -s apps/licensing-current/assets/official-logo.png
+          cmp -s apps/licensing-current/assets/icon.png apps/licensing-current/assets/official-logo.png
+          cmp -s apps/licensing-current/assets/adaptive-icon.png apps/licensing-current/assets/official-logo.png
+          cmp -s apps/licensing-current/assets/splash.png apps/licensing-current/assets/official-logo.png
       - name: Install dependencies
         working-directory: apps/licensing-current
         run: npm install --no-audit --no-fund
-
       - name: TypeScript
         working-directory: apps/licensing-current
         run: npm run typecheck
-
       - name: Expo native generation
         working-directory: apps/licensing-current
         env:
@@ -52,7 +48,11 @@ jobs:
           EXPO_NO_GIT_STATUS: '1'
           NODE_ENV: production
         run: npx expo prebuild --platform android --clean --no-install
-
+      - name: Verify generated Android identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -R "applicationId.*com.shahboun.licensing" apps/licensing-current/android/app/build.gradle
       - name: Build standalone release APK
         working-directory: apps/licensing-current/android
         env:
@@ -61,22 +61,20 @@ jobs:
         run: |
           chmod +x gradlew
           ./gradlew assembleRelease --no-daemon --stacktrace
-
-      - name: Verify APK is standalone and bundled
+      - name: Verify final APK identity and embedded JS
         shell: bash
         run: |
           set -euo pipefail
           APK=apps/licensing-current/android/app/build/outputs/apk/release/app-release.apk
-          test -f "$APK"
+          test -s "$APK"
           unzip -l "$APK" > /tmp/apk-list.txt
-          grep -Eq 'assets/(index\.android\.bundle|expo-root/.*\.bundle)' /tmp/apk-list.txt || {
-            echo 'ERROR: JavaScript bundle is not embedded in release APK'
-            grep -i 'bundle' /tmp/apk-list.txt | head -50 || true
-            exit 1
-          }
-          unzip -l "$APK" | grep -E 'res/mipmap|res/drawable' | head -50
-
-      - name: Package standalone result
+          grep -Eq 'assets/index.android.bundle|assets/.*\.bundle' /tmp/apk-list.txt
+          AAPT=$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -1)
+          test -x "$AAPT"
+          BADGING=$($AAPT dump badging "$APK")
+          echo "$BADGING" | grep -F "package: name='com.shahboun.licensing'"
+          echo "$BADGING" | grep -F "versionCode='61'"
+      - name: Package verified standalone result
         shell: bash
         run: |
           set -euo pipefail
@@ -84,7 +82,6 @@ jobs:
           APK=apps/licensing-current/android/app/build/outputs/apk/release/app-release.apk
           cp "$APK" dist/Shahboun_Licensing_6.0.1_STANDALONE.apk
           sha256sum dist/Shahboun_Licensing_6.0.1_STANDALONE.apk > dist/Shahboun_Licensing_6.0.1_STANDALONE.apk.sha256
-
       - uses: actions/upload-artifact@v4
         with:
           name: Shahboun-Licensing-6.0.1-STANDALONE
