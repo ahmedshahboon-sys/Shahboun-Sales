@@ -1,8 +1,8 @@
-name: Clean Shahboun Licensing 6.0.1 Standalone
+name: Shahboun Licensing 6.0.2 Signed Owner App
 
 on:
   push:
-    branches: [suite-6.0.1-clean]
+    branches: [suite-6.0.2-repair]
     paths:
       - 'apps/licensing-current/**'
       - '.github/workflows/clean-licensing-ci.yml'
@@ -12,9 +12,9 @@ permissions:
   contents: read
 
 jobs:
-  verify:
+  build-signed-owner-app:
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -24,67 +24,86 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - name: Verify canonical identity and approved branding
+
+      - name: Verify owner app invariants
         shell: bash
         run: |
           set -euo pipefail
-          grep -Fq "com.shahboun.licensing" apps/licensing-current/app.config.js
-          grep -Fq "versionCode: 61" apps/licensing-current/app.config.js
+          grep -Fq "package: 'com.shahboun.licensing'" apps/licensing-current/app.config.js
+          grep -Fq "version: '6.0.2'" apps/licensing-current/app.config.js
+          grep -Fq "versionCode: 62" apps/licensing-current/app.config.js
           grep -Fq "9d835e52-7b7d-4a08-83a6-b21ad88b066c" apps/licensing-current/app.config.js
           test -s apps/licensing-current/assets/official-logo.png
           cmp -s apps/licensing-current/assets/icon.png apps/licensing-current/assets/official-logo.png
           cmp -s apps/licensing-current/assets/adaptive-icon.png apps/licensing-current/assets/official-logo.png
           cmp -s apps/licensing-current/assets/splash.png apps/licensing-current/assets/official-logo.png
-      - name: Install dependencies
+          ! grep -Fq "كلمة المرور أو PIN" apps/licensing-current/App.tsx
+          ! grep -Fq "DEFAULT_PASSWORD" apps/licensing-current/App.tsx
+          grep -Fq "خاص بالمالك — يفتح مباشرة بدون كلمة مرور أو PIN" apps/licensing-current/App.tsx
+
+      - name: Install dependencies and typecheck
         working-directory: apps/licensing-current
-        run: npm install --no-audit --no-fund
-      - name: TypeScript
-        working-directory: apps/licensing-current
-        run: npm run typecheck
-      - name: Expo native generation
+        run: |
+          npm install --no-audit --no-fund
+          npm run typecheck
+
+      - name: Verify EAS owner project
         working-directory: apps/licensing-current
         env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$EXPO_TOKEN" || { echo EXPO_TOKEN_MISSING; exit 2; }
+          npx --yes eas-cli@latest account:view --non-interactive
+          npx --yes eas-cli@latest project:info --non-interactive
+
+      - name: Build APK with persistent EAS release credentials
+        working-directory: apps/licensing-current
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
           CI: '1'
-          EXPO_NO_GIT_STATUS: '1'
-          NODE_ENV: production
-        run: npx expo prebuild --platform android --clean --no-install
-      - name: Verify generated Android identity
         shell: bash
         run: |
           set -euo pipefail
-          grep -R "applicationId.*com.shahboun.licensing" apps/licensing-current/android/app/build.gradle
-      - name: Build standalone release APK
-        working-directory: apps/licensing-current/android
-        env:
-          NODE_ENV: production
-          GRADLE_OPTS: -Dorg.gradle.jvmargs=-Xmx4g -Dorg.gradle.daemon=false
-        run: |
-          chmod +x gradlew
-          ./gradlew assembleRelease --no-daemon --stacktrace
-      - name: Verify final APK identity and embedded JS
+          mkdir -p ../../dist-licensing
+          npx --yes eas-cli@latest build --platform android --profile preview --non-interactive --wait --json > ../../dist-licensing/eas-licensing-build.json
+          node - <<'NODE'
+          const fs=require('fs');
+          const data=JSON.parse(fs.readFileSync('dist-licensing/eas-licensing-build.json','utf8'));
+          const b=Array.isArray(data)?data[0]:data;
+          const url=b?.artifacts?.applicationArchiveUrl || b?.artifacts?.buildUrl || b?.artifactUrl;
+          if(!url) throw new Error('EAS_APK_URL_MISSING');
+          fs.writeFileSync('dist-licensing/eas-licensing-url.txt',url);
+          NODE
+          curl --fail --location --retry 5 --retry-delay 3 "$(cat ../../dist-licensing/eas-licensing-url.txt)" -o ../../dist-licensing/Shahboun_Licensing_6.0.2_SIGNED_OWNER.apk
+          test -s ../../dist-licensing/Shahboun_Licensing_6.0.2_SIGNED_OWNER.apk
+
+      - name: Verify APK package, version and certificate
         shell: bash
         run: |
           set -euo pipefail
-          APK=apps/licensing-current/android/app/build/outputs/apk/release/app-release.apk
-          test -s "$APK"
-          unzip -l "$APK" > /tmp/apk-list.txt
-          grep -Eq 'assets/index.android.bundle|assets/.*\.bundle' /tmp/apk-list.txt
-          AAPT=$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -1)
-          test -x "$AAPT"
+          APK=dist-licensing/Shahboun_Licensing_6.0.2_SIGNED_OWNER.apk
+          unzip -l "$APK" > /tmp/lic-apk-list.txt
+          grep -Eq 'assets/index.android.bundle|assets/.*\.bundle' /tmp/lic-apk-list.txt
+          SDKROOT="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+          AAPT=$(find "$SDKROOT/build-tools" -type f -name aapt | sort -V | tail -1)
+          APKSIGNER=$(find "$SDKROOT/build-tools" -type f -name apksigner | sort -V | tail -1)
           BADGING=$($AAPT dump badging "$APK")
+          echo "$BADGING" | tee dist-licensing/Shahboun_Licensing_6.0.2.badging.txt
           echo "$BADGING" | grep -F "package: name='com.shahboun.licensing'"
-          echo "$BADGING" | grep -F "versionCode='61'"
-      - name: Package verified standalone result
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p dist
-          APK=apps/licensing-current/android/app/build/outputs/apk/release/app-release.apk
-          cp "$APK" dist/Shahboun_Licensing_6.0.1_STANDALONE.apk
-          sha256sum dist/Shahboun_Licensing_6.0.1_STANDALONE.apk > dist/Shahboun_Licensing_6.0.1_STANDALONE.apk.sha256
+          echo "$BADGING" | grep -F "versionCode='62'"
+          "$APKSIGNER" verify --verbose --print-certs "$APK" | tee dist-licensing/Shahboun_Licensing_6.0.2.signing.txt
+          sha256sum "$APK" > dist-licensing/Shahboun_Licensing_6.0.2_SIGNED_OWNER.apk.sha256
+
       - uses: actions/upload-artifact@v4
         with:
-          name: Shahboun-Licensing-6.0.1-STANDALONE
-          path: dist/
+          name: Shahboun-Licensing-6.0.2-SIGNED-OWNER
+          path: |
+            dist-licensing/Shahboun_Licensing_6.0.2_SIGNED_OWNER.apk
+            dist-licensing/Shahboun_Licensing_6.0.2_SIGNED_OWNER.apk.sha256
+            dist-licensing/Shahboun_Licensing_6.0.2.signing.txt
+            dist-licensing/Shahboun_Licensing_6.0.2.badging.txt
+            dist-licensing/eas-licensing-build.json
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 30
