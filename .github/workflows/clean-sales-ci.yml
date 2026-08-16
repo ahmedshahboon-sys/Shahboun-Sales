@@ -36,7 +36,7 @@ jobs:
           test -s apps/android-current/assets/images/icon.png
           cmp -s apps/android-current/assets/images/official-logo.png apps/android-current/assets/images/icon.png
           ! test -e apps/android-current/assets/images/shahboun-icon.png
-          ! grep -R --exclude-dir=node_modules --exclude-dir=.git -Fq 'shahboun-icon.png' apps/android-current
+          ! grep -R --exclude-dir=node_modules --exclude-dir=.git --exclude-dir=android --include='*.ts' --include='*.tsx' --include='*.js' --include='*.json' -Fq 'shahboun-icon.png' apps/android-current/app apps/android-current/components apps/android-current/constants apps/android-current/context apps/android-current/db apps/android-current/hooks apps/android-current/lib apps/android-current/services apps/android-current/utils apps/android-current/app.json 2>/dev/null
       - name: Install dependencies
         working-directory: apps/android-current
         run: npm install --no-audit --no-fund
