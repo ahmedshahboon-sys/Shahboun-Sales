@@ -28,6 +28,9 @@ jobs:
           $firstPad=$b64.IndexOf('=')
           Write-Host "first_padding=$firstPad"
           if($firstPad -ge 0 -and $firstPad -lt ($b64.Length-2)){ throw "INTERNAL_PADDING_AT_$firstPad" }
+          $rem=$b64.Length % 4
+          if($rem -eq 1){ throw 'U3_BASE64_IRRECOVERABLE' }
+          if($rem -gt 0){ $b64 += '=' * (4-$rem) }
           $archive=Join-Path $env:RUNNER_TEMP 'u3-source.tar.xz'
           [IO.File]::WriteAllBytes($archive,[Convert]::FromBase64String($b64))
           $hash=(Get-FileHash $archive -Algorithm SHA256).Hash.ToLower()
