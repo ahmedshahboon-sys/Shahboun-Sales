@@ -3,7 +3,7 @@ module.exports = {
     owner: 'ahmedshahboon',
     name: 'شهبون للتراخيص والتفعيل',
     slug: 'shahboun-licensing-final',
-    version: '6.0.1',
+    version: '6.0.2',
     orientation: 'default',
     icon: './assets/icon.png',
     userInterfaceStyle: 'automatic',
@@ -12,7 +12,7 @@ module.exports = {
     splash: { image: './assets/splash.png', resizeMode: 'contain', backgroundColor: '#FFFFFF' },
     android: {
       package: 'com.shahboun.licensing',
-      versionCode: 61,
+      versionCode: 62,
       adaptiveIcon: { foregroundImage: './assets/adaptive-icon.png', backgroundColor: '#FFFFFF' }
     },
     plugins: ['expo-secure-store','expo-sqlite','expo-document-picker','expo-system-ui','./plugins/withLicensingSecurity'],
