@@ -1,4 +1,4 @@
-name: Shahboun Sales 6.0.2 Signed Update
+name: Shahboun Sales 6.0.2 Verified Update
 
 on:
   push:
@@ -12,9 +12,9 @@ permissions:
   contents: read
 
 jobs:
-  build-signed-update:
+  build-and-prove-update:
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
+    timeout-minutes: 70
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -25,83 +25,89 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Verify canonical identity, version and approved logo
+      - name: Verify identity, version and official brand
         shell: bash
         run: |
           set -euo pipefail
           grep -Fq '"package": "com.shahboun.sales"' apps/android-current/app.json
           grep -Fq '"version": "6.0.2"' apps/android-current/app.json
           grep -Fq '"versionCode": 62' apps/android-current/app.json
-          grep -Fq 'cad8ddae-8f8d-46d4-ae4a-3c97809b3960' apps/android-current/app.json
           test -s apps/android-current/assets/images/official-logo.png
           test -s apps/android-current/assets/images/icon.png
           cmp -s apps/android-current/assets/images/official-logo.png apps/android-current/assets/images/icon.png
 
-      - name: Install dependencies and typecheck
+      - name: Install, typecheck and generate native project
         working-directory: apps/android-current
+        env:
+          CI: '1'
+          EXPO_NO_GIT_STATUS: '1'
+          NODE_ENV: production
         run: |
           npm install --no-audit --no-fund
           npm run typecheck
+          npx expo prebuild --platform android --clean --no-install
 
-      - name: Verify EAS account and historical project
-        working-directory: apps/android-current
+      - name: Build standalone release APK using same pipeline as approved 6.0.1
+        working-directory: apps/android-current/android
         env:
-          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-        shell: bash
+          NODE_ENV: production
+          GRADLE_OPTS: -Dorg.gradle.jvmargs=-Xmx4g -Dorg.gradle.daemon=false
         run: |
-          set -euo pipefail
-          test -n "$EXPO_TOKEN" || { echo EXPO_TOKEN_MISSING; exit 2; }
-          npx --yes eas-cli@latest account:view --non-interactive
-          npx --yes eas-cli@latest project:info --non-interactive
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon --stacktrace
 
-      - name: Build APK with persistent EAS release credentials
-        working-directory: apps/android-current
+      - name: Collect new APK and download approved 6.0.1 reference artifact
         env:
-          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-          CI: '1'
+          GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p ../../dist
-          npx --yes eas-cli@latest build --platform android --profile preview --non-interactive --wait --json > ../../dist/eas-sales-build.json
-          node - <<'NODE'
-          const fs=require('fs');
-          const raw=fs.readFileSync('dist/eas-sales-build.json','utf8').trim();
-          const data=JSON.parse(raw);
-          const b=Array.isArray(data)?data[0]:data;
-          const url=b?.artifacts?.applicationArchiveUrl || b?.artifacts?.buildUrl || b?.artifactUrl;
-          if(!url) throw new Error('EAS_APK_URL_MISSING');
-          fs.writeFileSync('dist/eas-sales-url.txt',url);
-          fs.writeFileSync('dist/eas-sales-id.txt',String(b.id||''));
-          NODE
-          curl --fail --location --retry 5 --retry-delay 3 "$(cat ../../dist/eas-sales-url.txt)" -o ../../dist/Shahboun_Sales_6.0.2_SIGNED_UPDATE.apk
-          test -s ../../dist/Shahboun_Sales_6.0.2_SIGNED_UPDATE.apk
+          mkdir -p dist /tmp/shb-old-sales
+          cp apps/android-current/android/app/build/outputs/apk/release/app-release.apk dist/Shahboun_Sales_6.0.2_UPDATE.apk
+          curl --fail --location \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            https://api.github.com/repos/ahmedshahboon-sys/Shahboun-Sales/actions/artifacts/9256723167/zip \
+            -o /tmp/shb-old-sales.zip
+          unzip -q /tmp/shb-old-sales.zip -d /tmp/shb-old-sales
+          OLD=$(find /tmp/shb-old-sales -type f -name '*.apk' | head -1)
+          test -s "$OLD"
+          cp "$OLD" /tmp/Shahboun_Sales_6.0.1_REFERENCE.apk
 
-      - name: Verify APK package, version, embedded bundle and certificate
+      - name: Prove package/version and signing certificate compatibility
         shell: bash
         run: |
           set -euo pipefail
-          APK=dist/Shahboun_Sales_6.0.2_SIGNED_UPDATE.apk
-          unzip -l "$APK" > /tmp/apk-list.txt
-          grep -Eq 'assets/index.android.bundle|assets/.*\.bundle' /tmp/apk-list.txt
+          NEW=dist/Shahboun_Sales_6.0.2_UPDATE.apk
+          OLD=/tmp/Shahboun_Sales_6.0.1_REFERENCE.apk
           SDKROOT="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
           AAPT=$(find "$SDKROOT/build-tools" -type f -name aapt | sort -V | tail -1)
           APKSIGNER=$(find "$SDKROOT/build-tools" -type f -name apksigner | sort -V | tail -1)
-          BADGING=$($AAPT dump badging "$APK")
-          echo "$BADGING" | tee dist/Shahboun_Sales_6.0.2.badging.txt
-          echo "$BADGING" | grep -F "package: name='com.shahboun.sales'"
-          echo "$BADGING" | grep -F "versionCode='62'"
-          "$APKSIGNER" verify --verbose --print-certs "$APK" | tee dist/Shahboun_Sales_6.0.2.signing.txt
-          sha256sum "$APK" > dist/Shahboun_Sales_6.0.2_SIGNED_UPDATE.apk.sha256
+          NEWBAD=$($AAPT dump badging "$NEW")
+          OLDBAD=$($AAPT dump badging "$OLD")
+          echo "$NEWBAD" | grep -F "package: name='com.shahboun.sales'"
+          echo "$NEWBAD" | grep -F "versionCode='62'"
+          echo "$OLDBAD" | grep -F "package: name='com.shahboun.sales'"
+          echo "$OLDBAD" | grep -F "versionCode='61'"
+          "$APKSIGNER" verify --verbose --print-certs "$NEW" | tee dist/Shahboun_Sales_6.0.2.signing.txt
+          "$APKSIGNER" verify --verbose --print-certs "$OLD" > /tmp/old-signing.txt
+          NEWCERT=$(grep -m1 'certificate SHA-256 digest:' dist/Shahboun_Sales_6.0.2.signing.txt | sed 's/.*digest: //')
+          OLDCERT=$(grep -m1 'certificate SHA-256 digest:' /tmp/old-signing.txt | sed 's/.*digest: //')
+          echo "6.0.1 certificate: $OLDCERT"
+          echo "6.0.2 certificate: $NEWCERT"
+          test -n "$NEWCERT" && test "$NEWCERT" = "$OLDCERT"
+          unzip -l "$NEW" > /tmp/new-apk-list.txt
+          grep -Eq 'assets/index.android.bundle|assets/.*\.bundle' /tmp/new-apk-list.txt
+          sha256sum "$NEW" > dist/Shahboun_Sales_6.0.2_UPDATE.apk.sha256
+          printf 'UPDATE_COMPATIBLE_WITH=6.0.1\nPACKAGE=com.shahboun.sales\nOLD_VERSION_CODE=61\nNEW_VERSION_CODE=62\nCERT_SHA256=%s\n' "$NEWCERT" > dist/UPDATE_COMPATIBILITY.txt
 
       - uses: actions/upload-artifact@v4
         with:
-          name: Shahboun-Sales-6.0.2-SIGNED-UPDATE
+          name: Shahboun-Sales-6.0.2-VERIFIED-UPDATE
           path: |
-            dist/Shahboun_Sales_6.0.2_SIGNED_UPDATE.apk
-            dist/Shahboun_Sales_6.0.2_SIGNED_UPDATE.apk.sha256
+            dist/Shahboun_Sales_6.0.2_UPDATE.apk
+            dist/Shahboun_Sales_6.0.2_UPDATE.apk.sha256
             dist/Shahboun_Sales_6.0.2.signing.txt
-            dist/Shahboun_Sales_6.0.2.badging.txt
-            dist/eas-sales-build.json
+            dist/UPDATE_COMPATIBILITY.txt
           if-no-files-found: error
           retention-days: 30
