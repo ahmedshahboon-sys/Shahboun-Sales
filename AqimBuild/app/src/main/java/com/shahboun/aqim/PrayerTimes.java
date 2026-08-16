@@ -26,16 +26,18 @@ public final class PrayerTimes {
     private static final int[] LIBYA_CAL = {7,-1,3,-1,3,3,4};
 
     public static LinkedHashMap<String, Calendar> calculate(Calendar date,double lat,double lon,int[] offsets){
-        return calculate(date,lat,lon,offsets,true,false,Method.LIBYA);
+        Method method=isLibya(lat,lon)?Method.LIBYA:Method.MWL;
+        return calculate(date,lat,lon,offsets,true,false,method);
     }
 
     public static LinkedHashMap<String, Calendar> calculate(Calendar date,double lat,double lon,int[] offsets,boolean shafii,boolean libyaCalibration){
-        return calculate(date,lat,lon,offsets,shafii,libyaCalibration,Method.LIBYA);
+        Method method=isLibya(lat,lon)?Method.LIBYA:Method.MWL;
+        return calculate(date,lat,lon,offsets,shafii,libyaCalibration,method);
     }
 
     public static LinkedHashMap<String, Calendar> calculate(Calendar date,double lat,double lon,int[] offsets,boolean shafii,boolean libyaCalibration,Method method){
         if(date==null) date=Calendar.getInstance();
-        if(method==null) method=Method.LIBYA;
+        if(method==null) method=isLibya(lat,lon)?Method.LIBYA:Method.MWL;
         TimeZone tz=date.getTimeZone()!=null?date.getTimeZone():TimeZone.getDefault();
         Calendar day=(Calendar)date.clone();
         day.setTimeZone(tz);
