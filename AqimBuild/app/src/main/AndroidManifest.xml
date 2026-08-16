@@ -18,6 +18,7 @@
     <activity android:name=".MainActivity" android:screenOrientation="unspecified" android:exported="false" />
     <activity android:name=".QuranActivity" android:screenOrientation="unspecified" android:exported="false" />
     <activity android:name=".QuranTranslationActivity" android:screenOrientation="unspecified" android:exported="false" />
+    <activity android:name=".ExternalQuestionActivity" android:screenOrientation="unspecified" android:exported="false" />
     <activity android:name=".IbadatiActivity" android:screenOrientation="unspecified" android:exported="false" />
     <activity android:name=".WorldLocationActivity" android:screenOrientation="unspecified" android:exported="false" />
     <activity android:name=".LiveQiblaActivity" android:screenOrientation="unspecified" android:exported="false" />
