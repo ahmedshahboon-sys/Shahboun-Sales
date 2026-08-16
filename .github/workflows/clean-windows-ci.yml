@@ -27,7 +27,9 @@ jobs:
           if($parts.Count -lt 4){ throw 'WINDOWS_SOURCE_PARTS_MISSING' }
           $raw=($parts | ForEach-Object { Get-Content $_.FullName -Raw }) -join ''
           $b64=[regex]::Replace($raw,'[^A-Za-z0-9+/=]','')
-          if(($b64.Length % 4) -ne 0){ throw "WINDOWS_SOURCE_BASE64_LENGTH_INVALID_$($b64.Length)" }
+          $rem=$b64.Length % 4
+          if($rem -eq 1){ throw "WINDOWS_SOURCE_BASE64_IRRECOVERABLE_$($b64.Length)" }
+          if($rem -gt 0){ $b64 += '=' * (4-$rem) }
           $archive=Join-Path $env:RUNNER_TEMP 'shahboun-source.tar.xz'
           [IO.File]::WriteAllBytes($archive,[Convert]::FromBase64String($b64))
           if((Get-Item $archive).Length -lt 10000){ throw 'WINDOWS_SOURCE_ARCHIVE_TOO_SMALL' }
@@ -62,6 +64,9 @@ jobs:
           if(!$logoParts){ throw 'OFFICIAL_LOGO_PARTS_MISSING' }
           $raw=($logoParts | ForEach-Object { Get-Content $_.FullName -Raw }) -join ''
           $b64=[regex]::Replace($raw,'[^A-Za-z0-9+/=]','')
+          $rem=$b64.Length % 4
+          if($rem -eq 1){ throw 'OFFICIAL_LOGO_BASE64_IRRECOVERABLE' }
+          if($rem -gt 0){ $b64 += '=' * (4-$rem) }
           $src=Join-Path $env:RUNNER_TEMP 'official-logo.jpg'
           [IO.File]::WriteAllBytes($src,[Convert]::FromBase64String($b64))
           choco install imagemagick -y --no-progress
