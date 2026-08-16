@@ -11,7 +11,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -28,22 +28,25 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.11.1'
-      - name: Add CC0 default adhan audio
+      - name: Add Cairo font and licensed adhan audio
         run: |
-          mkdir -p AqimBuild/app/src/main/res/raw
+          mkdir -p AqimBuild/app/src/main/res/raw AqimBuild/app/src/main/res/font
+          curl -L --fail --retry 3 "https://raw.githubusercontent.com/google/fonts/main/ofl/cairo/Cairo%5Bslnt,wght%5D.ttf" -o AqimBuild/app/src/main/res/font/cairo.ttf
           curl -L --fail --retry 3 "https://upload.wikimedia.org/wikipedia/commons/a/a9/Muslim_calling_to_prayer.ogg" -o AqimBuild/app/src/main/res/raw/adhan_default.ogg
+          curl -L --fail --retry 3 "https://commons.wikimedia.org/wiki/Special:Redirect/file/Azan.ogg" -o AqimBuild/app/src/main/res/raw/adhan_classic.ogg
+          curl -L --fail --retry 3 "https://commons.wikimedia.org/wiki/Special:Redirect/file/Adhan%2C%20Great%20Mosque%20of%20Mecca%20-%20Jan%2021%2C%202013.webm" -o AqimBuild/app/src/main/res/raw/adhan_mecca_2013.webm
       - name: Build unsigned release APK
         working-directory: AqimBuild
         run: gradle --no-daemon :app:assembleRelease
       - name: Prepare APK and official signer
         run: |
           mkdir -p output
-          cp AqimBuild/app/build/outputs/apk/release/app-release-unsigned.apk output/AQIM-v1.1.0-unsigned.apk
+          cp AqimBuild/app/build/outputs/apk/release/app-release-unsigned.apk output/AQIM-v1.2.0-unsigned.apk
           cp "$ANDROID_HOME/build-tools/36.0.0/lib/apksigner.jar" output/apksigner.jar
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: AQIM-v1.1.0-build-kit
+          name: AQIM-v1.2.0-build-kit
           path: output/
           if-no-files-found: error
           retention-days: 30
