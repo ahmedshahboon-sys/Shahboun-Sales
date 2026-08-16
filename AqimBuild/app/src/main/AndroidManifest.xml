@@ -23,12 +23,13 @@
     <activity android:name=".DhikrSettingsActivity" android:screenOrientation="unspecified" android:exported="false" />
     <activity android:name=".StrongFajrActivity" android:screenOrientation="unspecified" android:exported="false" android:showWhenLocked="true" android:turnScreenOn="true" android:excludeFromRecents="true" />
     <activity android:name=".StrongFajrSettingsActivity" android:screenOrientation="unspecified" android:exported="false" />
+    <activity android:name=".IslamicToolsActivity" android:screenOrientation="unspecified" android:exported="false" />
+    <activity android:name=".StandbyActivity" android:screenOrientation="unspecified" android:exported="false" />
     <activity android:name=".AboutActivity" android:screenOrientation="unspecified" android:exported="false" />
 
     <service android:name=".AdhanService" android:exported="false" android:foregroundServiceType="mediaPlayback" />
     <service android:name=".BubbleService" android:exported="false" android:foregroundServiceType="specialUse"><property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE" android:value="User-initiated floating tasbih counter displayed above other apps" /></service>
     <service android:name=".AqimStatusService" android:exported="false" android:foregroundServiceType="specialUse"><property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE" android:value="User-enabled persistent next-prayer countdown notification and widget updater" /></service>
-
     <receiver android:name=".BootReceiver" android:enabled="true" android:exported="true"><intent-filter><action android:name="android.intent.action.BOOT_COMPLETED" /><action android:name="android.intent.action.TIME_SET" /><action android:name="android.intent.action.TIMEZONE_CHANGED" /></intent-filter></receiver>
     <receiver android:name=".PrayerActionReceiver" android:exported="false" />
     <receiver android:name=".PrayerQuestionReceiver" android:exported="false" />
