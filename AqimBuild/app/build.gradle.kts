@@ -9,8 +9,8 @@ android {
         applicationId = "com.shahboun.aqim"
         minSdk = 24
         targetSdk = 36
-        versionCode = 11
-        versionName = "1.5.5"
+        versionCode = 12
+        versionName = "1.5.6"
     }
     buildTypes { release { isMinifyEnabled = false } }
 }
@@ -49,7 +49,7 @@ val prepareSingleDashboardNavigation by tasks.registering {
             s=s.replace("city.setOnClickListener(v->showCityPicker());","city.setOnClickListener(v->startActivity(new Intent(this,WorldLocationActivity.class)));")
             s=s.replace("@Override protected void onResume(){super.onResume();if(screen==7)showOnboarding();}","@Override protected void onResume(){super.onResume();if(screen==7)showOnboarding();else if(screen==5)showSettings();}")
             s=s.replace("getSharedPreferences(PREF,MODE_PRIVATE).edit().putBoolean(\"onboarded\",true).apply();startStatusIfEnabled();scheduleAll(this);showHome();","getSharedPreferences(PREF,MODE_PRIVATE).edit().putBoolean(\"onboarded\",true).apply();startStatusIfEnabled();scheduleAll(this);showSettings();")
-            s=s.replace("الإصدار 1.3.0","الإصدار 1.5.5").replace("الإصدار 1.5.0","الإصدار 1.5.5").replace("الإصدار 1.5.1","الإصدار 1.5.5").replace("الإصدار 1.5.2","الإصدار 1.5.5").replace("الإصدار 1.5.3","الإصدار 1.5.5").replace("الإصدار 1.5.4","الإصدار 1.5.5")
+            s=s.replace("الإصدار 1.3.0","الإصدار 1.5.6").replace("الإصدار 1.5.0","الإصدار 1.5.6").replace("الإصدار 1.5.1","الإصدار 1.5.6").replace("الإصدار 1.5.2","الإصدار 1.5.6").replace("الإصدار 1.5.3","الإصدار 1.5.6").replace("الإصدار 1.5.4","الإصدار 1.5.6").replace("الإصدار 1.5.5","الإصدار 1.5.6")
             f.writeText(s)
         }
         val d=file("src/main/java/com/shahboun/aqim/DashboardActivity.java")
@@ -58,7 +58,10 @@ val prepareSingleDashboardNavigation by tasks.registering {
             s=s.replace("🕋 اتجاه القبلة","اتجاه القبلة")
             s=s.replace("if(id==4){x.setCompoundDrawablesWithIntrinsicBounds(0,0,R.drawable.ic_kaaba,0);x.setCompoundDrawablePadding(dp(5));}","")
             s=s.replace("addBottomNav(root);","")
-            s=s.replace("الإصدار 1.5.4","الإصدار 1.5.5")
+            s=s.replace("مواقيت 5 أيام","التقويم الشهري")
+            s=s.replace("new String[]{\"تذكير الذكر\",\"المسبحة والفقاعة\",\"الفجر القوي\",\"حصن المسلم\",\"أسماء الله الحسنى\",\"دليل المسلم والأدعية\"},new int[]{6,7,8,9,10,15}","new String[]{\"تذكير الذكر\",\"تذكيرات العبادات\",\"المسبحة والفقاعة\",\"الفجر القوي\",\"حصن المسلم\",\"أسماء الله الحسنى\",\"دليل المسلم والأدعية\"},new int[]{6,16,7,8,9,10,15}")
+            s=s.replace("else if(k==15)in=new Intent(this,MuslimGuideActivity.class);else in=new Intent(this,AboutActivity.class);","else if(k==15)in=new Intent(this,MuslimGuideActivity.class);else if(k==16)in=new Intent(this,WorshipReminderActivity.class);else in=new Intent(this,AboutActivity.class);")
+            s=s.replace("الإصدار 1.5.4","الإصدار 1.5.6").replace("الإصدار 1.5.5","الإصدار 1.5.6")
             d.writeText(s)
         }
     }
@@ -85,4 +88,4 @@ tasks.matching { it.name == "preBuild" }.configureEach {
     dependsOn(prepareNearbyMosques)
 }
 
-// AQIM 1.5.5 review build based on the same com.shahboun.aqim project
+// AQIM 1.5.6 review build based on the same com.shahboun.aqim project
