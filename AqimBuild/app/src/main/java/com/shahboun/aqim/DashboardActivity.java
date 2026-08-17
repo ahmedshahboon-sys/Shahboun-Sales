@@ -3,77 +3,41 @@ package com.shahboun.aqim;
 import android.app.*;
 import android.content.*;
 import android.graphics.*;
-import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.*;
 import android.os.*;
 import android.view.*;
 import android.widget.*;
 
 public class DashboardActivity extends Activity {
-    static final int GREEN=Color.rgb(15,76,58), DARK=Color.rgb(10,55,43), GOLD=Color.rgb(205,168,92), IVORY=Color.rgb(248,244,235), TEXT=Color.rgb(35,48,43), MUTED=Color.rgb(105,110,108);
-    android.graphics.Typeface cairo;
+    static final int GREEN=Color.rgb(15,76,58), DARK=Color.rgb(8,51,39), GOLD=Color.rgb(205,168,92), IVORY=Color.rgb(248,244,235), TEXT=Color.rgb(35,48,43), MUTED=Color.rgb(105,110,108);
+    android.graphics.Typeface cairo; TextView prayerTitle,prayerTime,prayerLocation,iqamaText; Handler h=new Handler(Looper.getMainLooper()); boolean visible;
+    final Runnable tick=new Runnable(){public void run(){if(!visible)return;refreshPrayerCard();h.postDelayed(this,1000);}};
 
-    @Override public void onCreate(Bundle b){
-        super.onCreate(b);
-        getWindow().setStatusBarColor(IVORY); getWindow().setNavigationBarColor(IVORY);
-        if(Build.VERSION.SDK_INT>=23)getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
-        try{if(Build.VERSION.SDK_INT>=26)cairo=getResources().getFont(getResources().getIdentifier("cairo","font",getPackageName()));}catch(Exception ignored){}
-        if(!getSharedPreferences("aqim",MODE_PRIVATE).getBoolean("onboarded",false)){
-            getSharedPreferences("aqim",MODE_PRIVATE).edit().putBoolean("onboarded",true).apply();
-        }
-        DhikrReminderReceiver.ensureScheduled(this);
-        show();
-    }
-    @Override protected void onResume(){super.onResume();show();}
+    @Override public void onCreate(Bundle b){super.onCreate(b);getWindow().setStatusBarColor(IVORY);getWindow().setNavigationBarColor(IVORY);if(Build.VERSION.SDK_INT>=23)getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);try{if(Build.VERSION.SDK_INT>=26)cairo=getResources().getFont(getResources().getIdentifier("cairo","font",getPackageName()));}catch(Exception ignored){}if(!getSharedPreferences("aqim",MODE_PRIVATE).getBoolean("onboarded",false))getSharedPreferences("aqim",MODE_PRIVATE).edit().putBoolean("onboarded",true).apply();DhikrReminderReceiver.ensureScheduled(this);show();}
+    @Override protected void onResume(){super.onResume();visible=true;if(prayerTitle==null)show();h.removeCallbacks(tick);h.post(tick);}
+    @Override protected void onPause(){visible=false;h.removeCallbacks(tick);super.onPause();}
+    @Override protected void onDestroy(){h.removeCallbacks(tick);super.onDestroy();}
 
-    int dp(int v){return Math.round(v*getResources().getDisplayMetrics().density);}
-    GradientDrawable bg(int c,int radius){GradientDrawable g=new GradientDrawable();g.setColor(c);g.setCornerRadius(dp(radius));return g;}
+    int dp(int v){return Math.round(v*getResources().getDisplayMetrics().density);} GradientDrawable bg(int c,int radius){GradientDrawable g=new GradientDrawable();g.setColor(c);g.setCornerRadius(dp(radius));return g;}
     TextView t(String s,int z,int c,boolean bold){TextView x=new TextView(this);x.setText(s);x.setTextSize(z);x.setTextColor(c);x.setGravity(Gravity.CENTER);x.setPadding(dp(6),dp(5),dp(6),dp(5));if(cairo!=null)x.setTypeface(cairo,bold?1:0);return x;}
-    Button button(String s,boolean primary){Button x=new Button(this);x.setText(s);x.setAllCaps(false);x.setTextSize(14);x.setGravity(Gravity.CENTER);x.setTextColor(primary?Color.WHITE:TEXT);x.setBackground(bg(primary?GREEN:Color.WHITE,18));x.setElevation(dp(primary?4:2));x.setPadding(dp(10),0,dp(10),0);x.setMinHeight(0);x.setMinimumHeight(0);if(cairo!=null)x.setTypeface(cairo,1);return x;}
-
+    Drawable buttonBg(){StateListDrawable s=new StateListDrawable();GradientDrawable pressed=bg(Color.rgb(234,226,205),18);pressed.setStroke(dp(1),GOLD);GradientDrawable normal=bg(Color.WHITE,18);normal.setStroke(dp(1),Color.rgb(235,229,214));s.addState(new int[]{android.R.attr.state_pressed},pressed);s.addState(new int[]{},normal);return s;}
+    Button button(String s){Button x=new Button(this);x.setText(s);x.setAllCaps(false);x.setTextSize(14);x.setGravity(Gravity.CENTER);x.setTextColor(TEXT);x.setBackground(buttonBg());x.setElevation(dp(2));x.setPadding(dp(8),0,dp(8),0);x.setMinHeight(0);x.setMinimumHeight(0);if(cairo!=null)x.setTypeface(cairo,1);return x;}
     void applyInsets(View v){if(Build.VERSION.SDK_INT>=21)v.setOnApplyWindowInsetsListener((view,insets)->{int top,bottom;if(Build.VERSION.SDK_INT>=30){android.graphics.Insets x=insets.getInsets(WindowInsets.Type.systemBars());top=x.top;bottom=x.bottom;}else{top=insets.getSystemWindowInsetTop();bottom=insets.getSystemWindowInsetBottom();}view.setPadding(0,top,0,bottom);return insets;});}
 
-    void show(){
-        LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setGravity(Gravity.CENTER_HORIZONTAL);root.setPadding(dp(16),dp(10),dp(16),dp(28));root.setBackgroundColor(IVORY);root.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+    void show(){LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setGravity(Gravity.CENTER_HORIZONTAL);root.setPadding(dp(16),dp(10),dp(16),dp(32));root.setBackgroundColor(IVORY);root.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        LinearLayout hero=new LinearLayout(this);hero.setOrientation(LinearLayout.VERTICAL);hero.setGravity(Gravity.CENTER);hero.setPadding(dp(14),dp(12),dp(14),dp(13));hero.setBackground(bg(DARK,26));hero.setElevation(dp(6));
+        hero.addView(new IslamicPatternView(this),new LinearLayout.LayoutParams(-1,dp(32)));
+        ImageView logo=new ImageView(this);logo.setImageResource(getResources().getIdentifier("aqim_logo","drawable",getPackageName()));logo.setScaleType(ImageView.ScaleType.CENTER_INSIDE);hero.addView(logo,new LinearLayout.LayoutParams(dp(54),dp(54)));
+        hero.addView(t("أَقِم",28,Color.WHITE,true));hero.addView(t("صلاتك • ذكرك • قرآنك • يومك",12,Color.rgb(244,233,205),false));root.addView(hero,new LinearLayout.LayoutParams(-1,-2));
+        LinearLayout prayer=new LinearLayout(this);prayer.setOrientation(LinearLayout.VERTICAL);prayer.setGravity(Gravity.CENTER);prayer.setPadding(dp(12),dp(10),dp(12),dp(10));prayer.setBackground(bg(Color.WHITE,22));prayer.setElevation(dp(3));prayerTitle=t("الصلاة القادمة",19,GREEN,true);prayerTime=t("",17,GOLD,true);prayerLocation=t("",12,MUTED,false);iqamaText=t("",12,MUTED,false);prayer.addView(prayerTitle);prayer.addView(prayerTime);prayer.addView(prayerLocation);prayer.addView(iqamaText);LinearLayout.LayoutParams pp=new LinearLayout.LayoutParams(-1,-2);pp.setMargins(0,dp(10),0,dp(7));root.addView(prayer,pp);
+        addSection(root,"الأساسيات",new String[]{"الصلاة والأذان","مواقيت 5 أيام والتاريخ","المصحف والروايات","عبادتي اليوم","🕋 اتجاه القبلة","الموقع والدولة والمدينة"},new int[]{0,1,2,3,4,5});
+        addSection(root,"العبادات والتذكير",new String[]{"تذكير الذكر","المسبحة والفقاعة","الفجر القوي","حصن المسلم","أسماء الله الحسنى","دليل المسلم والأدعية"},new int[]{6,7,8,9,10,15});
+        addSection(root,"أدوات إضافية",new String[]{"أدوات إسلامية","سؤال ديني خارجي","الإعدادات","حول التطبيق"},new int[]{11,12,13,14});
+        root.addView(t("الإصدار 1.5.2 • تصميم وتطوير أحمد شهبون",11,MUTED,false),new LinearLayout.LayoutParams(-1,dp(40)));
+        ScrollView sc=new ScrollView(this);sc.setFillViewport(true);sc.setBackgroundColor(IVORY);sc.addView(root,new ScrollView.LayoutParams(-1,-2));applyInsets(sc);setContentView(sc);refreshPrayerCard();}
+    void refreshPrayerCard(){try{String[] n=MainActivity.nextPrayerInfo(this);prayerTitle.setText("الصلاة القادمة • "+n[0]);prayerTime.setText(n[1]+"  •  باقي "+n[2]);prayerLocation.setText(n[3]);iqamaText.setText(n.length>4?n[4]:"");}catch(Exception e){prayerTitle.setText("الصلاة القادمة");prayerTime.setText("حدّد موقعك");prayerLocation.setText("");iqamaText.setText("");}}
+    void addSection(LinearLayout root,String title,String[] labels,int[] ids){TextView h=t(title,15,GREEN,true);h.setGravity(Gravity.RIGHT);LinearLayout.LayoutParams hp=new LinearLayout.LayoutParams(-1,dp(36));hp.setMargins(dp(4),dp(4),dp(4),0);root.addView(h,hp);GridLayout grid=new GridLayout(this);int sw=getResources().getConfiguration().smallestScreenWidthDp;grid.setColumnCount(sw>=600?3:2);for(int i=0;i<labels.length;i++){Button x=button(labels[i]);final int id=ids[i];x.setOnClickListener(v->openFeature(id));GridLayout.LayoutParams gp=new GridLayout.LayoutParams();gp.width=0;gp.height=dp(58);gp.columnSpec=GridLayout.spec(GridLayout.UNDEFINED,1f);gp.setMargins(dp(4),dp(4),dp(4),dp(4));grid.addView(x,gp);}root.addView(grid,new LinearLayout.LayoutParams(-1,-2));}
+    void openFeature(int k){Intent in;if(k==0)in=new Intent(this,MainActivity.class).putExtra("target","prayers");else if(k==1)in=new Intent(this,PrayerScheduleActivity.class);else if(k==2)in=new Intent(this,QuranActivity.class);else if(k==3)in=new Intent(this,IbadatiActivity.class);else if(k==4)in=new Intent(this,LiveQiblaActivity.class);else if(k==5)in=new Intent(this,WorldLocationActivity.class);else if(k==6)in=new Intent(this,DhikrSettingsActivity.class);else if(k==7)in=new Intent(this,MainActivity.class).putExtra("target","tasbih");else if(k==8)in=new Intent(this,StrongFajrSettingsActivity.class);else if(k==9)in=new Intent(this,HisnActivity.class);else if(k==10)in=new Intent(this,NamesOfAllahActivity.class);else if(k==11)in=new Intent(this,IslamicToolsActivity.class);else if(k==12)in=new Intent(this,ExternalQuestionActivity.class);else if(k==13)in=new Intent(this,MainActivity.class).putExtra("target","settings");else if(k==15)in=new Intent(this,MuslimGuideActivity.class);else in=new Intent(this,AboutActivity.class);startActivity(in);}
 
-        LinearLayout hero=new LinearLayout(this);hero.setOrientation(LinearLayout.VERTICAL);hero.setGravity(Gravity.CENTER);hero.setPadding(dp(14),dp(14),dp(14),dp(15));hero.setBackground(bg(GREEN,28));hero.setElevation(dp(6));
-        LinearLayout deco=new LinearLayout(this);deco.setGravity(Gravity.CENTER);for(int i=0;i<7;i++){TextView d=t(i%2==0?"◆":"◇",12,GOLD,false);deco.addView(d,new LinearLayout.LayoutParams(dp(28),dp(26)));}hero.addView(deco);
-        ImageView logo=new ImageView(this);logo.setImageResource(getResources().getIdentifier("aqim_logo","drawable",getPackageName()));logo.setScaleType(ImageView.ScaleType.CENTER_INSIDE);hero.addView(logo,new LinearLayout.LayoutParams(dp(74),dp(74)));
-        hero.addView(t("أَقِم",30,Color.WHITE,true));hero.addView(t("صلاتك • ذكرك • قرآنك • يومك",13,Color.rgb(244,233,205),false));root.addView(hero,new LinearLayout.LayoutParams(-1,-2));
-
-        String[] n;try{n=MainActivity.nextPrayerInfo(this);}catch(Exception e){n=new String[]{"—","--:--","--:--","حدّد موقعك"};}
-        LinearLayout prayer=new LinearLayout(this);prayer.setOrientation(LinearLayout.VERTICAL);prayer.setGravity(Gravity.CENTER);prayer.setPadding(dp(12),dp(11),dp(12),dp(11));prayer.setBackground(bg(Color.WHITE,22));prayer.setElevation(dp(3));
-        prayer.addView(t("الصلاة القادمة • "+n[0],19,GREEN,true));prayer.addView(t(n[1]+"  •  باقي "+n[2],16,GOLD,true));prayer.addView(t(n[3],12,MUTED,false));if(n.length>4)prayer.addView(t(n[4],12,MUTED,false));LinearLayout.LayoutParams pp=new LinearLayout.LayoutParams(-1,-2);pp.setMargins(0,dp(10),0,dp(7));root.addView(prayer,pp);
-
-        addSection(root,"الأساسيات",new String[]{"الصلاة والأذان","مواقيت 5 أيام والتاريخ","المصحف والروايات","عبادتي اليوم","القبلة الحية","الموقع والدولة والمدينة"},new int[]{0,1,2,3,4,5},true);
-        addSection(root,"العبادات والتذكير",new String[]{"تذكير الذكر","المسبحة والفقاعة","الفجر القوي","حصن المسلم","أسماء الله الحسنى"},new int[]{6,7,8,9,10},false);
-        addSection(root,"أدوات إضافية",new String[]{"أدوات إسلامية","سؤال ديني خارجي","الإعدادات","حول التطبيق"},new int[]{11,12,13,14},false);
-        root.addView(t("الإصدار 1.5.0 • تصميم وتطوير أحمد شهبون",11,MUTED,false),new LinearLayout.LayoutParams(-1,dp(40)));
-        ScrollView sc=new ScrollView(this);sc.setFillViewport(true);sc.setBackgroundColor(IVORY);sc.addView(root,new ScrollView.LayoutParams(-1,-2));applyInsets(sc);setContentView(sc);
-    }
-
-    void addSection(LinearLayout root,String title,String[] labels,int[] ids,boolean important){
-        TextView h=t(title,15,GREEN,true);h.setGravity(Gravity.RIGHT);LinearLayout.LayoutParams hp=new LinearLayout.LayoutParams(-1,dp(38));hp.setMargins(dp(4),dp(4),dp(4),0);root.addView(h,hp);
-        GridLayout grid=new GridLayout(this);int sw=getResources().getConfiguration().smallestScreenWidthDp;grid.setColumnCount(sw>=600?3:2);grid.setUseDefaultMargins(false);
-        for(int i=0;i<labels.length;i++){Button x=button(labels[i],important&&i<2);final int id=ids[i];x.setOnClickListener(v->openFeature(id));GridLayout.LayoutParams gp=new GridLayout.LayoutParams();gp.width=0;gp.height=dp(60);gp.columnSpec=GridLayout.spec(GridLayout.UNDEFINED,1f);gp.setMargins(dp(4),dp(4),dp(4),dp(4));grid.addView(x,gp);}root.addView(grid,new LinearLayout.LayoutParams(-1,-2));
-    }
-
-    void openFeature(int k){
-        Intent in;
-        if(k==0)in=new Intent(this,MainActivity.class).putExtra("target","prayers");
-        else if(k==1)in=new Intent(this,PrayerScheduleActivity.class);
-        else if(k==2)in=new Intent(this,QuranActivity.class);
-        else if(k==3)in=new Intent(this,IbadatiActivity.class);
-        else if(k==4)in=new Intent(this,LiveQiblaActivity.class);
-        else if(k==5)in=new Intent(this,WorldLocationActivity.class);
-        else if(k==6)in=new Intent(this,DhikrSettingsActivity.class);
-        else if(k==7)in=new Intent(this,MainActivity.class).putExtra("target","tasbih");
-        else if(k==8)in=new Intent(this,StrongFajrSettingsActivity.class);
-        else if(k==9)in=new Intent(this,HisnActivity.class);
-        else if(k==10)in=new Intent(this,NamesOfAllahActivity.class);
-        else if(k==11)in=new Intent(this,IslamicToolsActivity.class);
-        else if(k==12)in=new Intent(this,ExternalQuestionActivity.class);
-        else if(k==13)in=new Intent(this,MainActivity.class).putExtra("target","settings");
-        else in=new Intent(this,AboutActivity.class);
-        startActivity(in);
-    }
+    class IslamicPatternView extends View{Paint p=new Paint(1);IslamicPatternView(Context c){super(c);p.setColor(GOLD);p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(dp(1));p.setAlpha(180);}protected void onDraw(Canvas c){super.onDraw(c);float w=getWidth(),h=getHeight(),cy=h/2f;for(int i=0;i<7;i++){float x=w*(i+1)/8f;c.save();c.translate(x,cy);c.rotate(45);float s=dp(i%2==0?5:3);c.drawRect(-s,-s,s,s,p);c.restore();}Path a=new Path();a.moveTo(w*.34f,h);a.quadTo(w*.5f,-h*.6f,w*.66f,h);c.drawPath(a,p);}}
 }
