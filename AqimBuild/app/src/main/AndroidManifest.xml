@@ -28,7 +28,8 @@
     <activity android:name=".WorshipReminderActivity" android:screenOrientation="unspecified" android:exported="false" />
     <activity android:name=".StrongFajrActivity" android:screenOrientation="unspecified" android:exported="false" android:showWhenLocked="true" android:turnScreenOn="true" android:excludeFromRecents="true" />
     <activity android:name=".StrongFajrSettingsActivity" android:screenOrientation="unspecified" android:exported="false" />
-    <activity android:name=".IslamicToolsActivity" android:screenOrientation="unspecified" android:exported="false" />
+    <activity android:name=".MosqueActivity" android:screenOrientation="unspecified" android:exported="false" />
+    <activity android:name=".ZakatActivity" android:screenOrientation="unspecified" android:exported="false" />
     <activity android:name=".StandbyActivity" android:screenOrientation="unspecified" android:exported="false" />
     <activity android:name=".HisnActivity" android:screenOrientation="unspecified" android:exported="false" />
     <activity android:name=".NamesOfAllahActivity" android:screenOrientation="unspecified" android:exported="false" />
