@@ -43,5 +43,6 @@
     <receiver android:name=".DhikrReminderReceiver" android:exported="false" />
     <receiver android:name=".WorshipReminderReceiver" android:exported="false" />
     <receiver android:name=".PrayerWidget" android:exported="true"><intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter><meta-data android:name="android.appwidget.provider" android:resource="@xml/aqim_widget_info" /></receiver>
+    <receiver android:name=".DailyWidget" android:exported="true"><intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter><meta-data android:name="android.appwidget.provider" android:resource="@xml/aqim_daily_widget_info" /></receiver>
   </application>
 </manifest>
