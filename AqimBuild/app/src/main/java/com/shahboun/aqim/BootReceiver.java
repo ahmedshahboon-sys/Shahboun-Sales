@@ -6,6 +6,7 @@ import android.os.Build;
 public class BootReceiver extends BroadcastReceiver {
  @Override public void onReceive(Context c,Intent i){
   MainActivity.scheduleAll(c);
+  PrayerReminderReceiver.scheduleAll(c);
   DhikrReminderReceiver.ensureScheduled(c);
   WorshipReminderReceiver.scheduleAll(c);
   if(c.getSharedPreferences("aqim",Context.MODE_PRIVATE).getBoolean("statusNotification",true)){
