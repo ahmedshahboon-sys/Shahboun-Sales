@@ -50,9 +50,25 @@ val prepareSingleDashboardNavigation by tasks.registering {
     }
 }
 
+val prepareNearbyMosques by tasks.registering {
+    doLast {
+        val f=file("src/main/java/com/shahboun/aqim/IslamicToolsActivity.java")
+        if(f.exists()){
+            var s=f.readText()
+            s=s.replace("15*60*1000L","5*60*1000L")
+            val oldLaunch="void launchMosqueSearch(double lat,double lon){String geo=\"geo:\"+lat+\",\"+lon+\"?q=\"+lat+\",\"+lon+\"(\"+Uri.encode(\"مساجد قريبة\")+\")\";Intent maps=new Intent(Intent.ACTION_VIEW,Uri.parse(geo));maps.setPackage(\"com.google.android.apps.maps\");try{startActivity(maps);return;}catch(Exception ignored){}Uri web=Uri.parse(\"https://www.google.com/maps/search/mosque/@\"+lat+\",\"+lon+\",15z\");try{startActivity(new Intent(Intent.ACTION_VIEW,web));}catch(Exception e){Toast.makeText(this,\"لا يوجد تطبيق خرائط متاح\",Toast.LENGTH_LONG).show();}}"
+            val newLaunch="void launchMosqueSearch(double lat,double lon){String geo=\"geo:\"+lat+\",\"+lon+\"?q=\"+Uri.encode(\"مسجد\");Intent maps=new Intent(Intent.ACTION_VIEW,Uri.parse(geo));maps.setPackage(\"com.google.android.apps.maps\");try{startActivity(maps);return;}catch(Exception ignored){}String url=\"https://www.google.com/maps/search/?api=1&query=\"+Uri.encode(\"مسجد\")+\"&center=\"+lat+\",\"+lon;try{startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse(url)));}catch(Exception e){Toast.makeText(this,\"لا يوجد تطبيق خرائط متاح\",Toast.LENGTH_LONG).show();}}"
+            s=s.replace(oldLaunch,newLaunch)
+            s=s.replace("new Handler(Looper.getMainLooper()).postDelayed(()->{try{lm.removeUpdates(listener);}catch(Exception ignored){}},10000);","new Handler(Looper.getMainLooper()).postDelayed(()->{try{lm.removeUpdates(listener);}catch(Exception ignored){}Toast.makeText(this,\"تعذر تحديد موقعك الحالي بدقة. حاول مرة أخرى بعد تفعيل GPS.\",Toast.LENGTH_LONG).show();},12000);")
+            f.writeText(s)
+        }
+    }
+}
+
 tasks.matching { it.name == "preBuild" }.configureEach {
     dependsOn(prepareOfficialAqimLogo)
     dependsOn(prepareSingleDashboardNavigation)
+    dependsOn(prepareNearbyMosques)
 }
 
 // AQIM 1.5.3 review build based on the same com.shahboun.aqim project
