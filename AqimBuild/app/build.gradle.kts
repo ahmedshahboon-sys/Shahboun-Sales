@@ -9,8 +9,8 @@ android {
         applicationId = "com.shahboun.aqim"
         minSdk = 24
         targetSdk = 36
-        versionCode = 9
-        versionName = "1.5.3"
+        versionCode = 10
+        versionName = "1.5.4"
     }
     buildTypes { release { isMinifyEnabled = false } }
 }
@@ -47,7 +47,7 @@ val prepareSingleDashboardNavigation by tasks.registering {
             s=s.replace("source.setOnClickListener(v->showAdhanPicker(false));","source.setOnClickListener(v->startActivity(new Intent(this,AdhanPickerActivity.class).putExtra(\"fajr\",false)));")
             s=s.replace("fajr.setOnClickListener(v->showAdhanPicker(true));","fajr.setOnClickListener(v->startActivity(new Intent(this,AdhanPickerActivity.class).putExtra(\"fajr\",true)));")
             s=s.replace("@Override protected void onResume(){super.onResume();if(screen==7)showOnboarding();}","@Override protected void onResume(){super.onResume();if(screen==7)showOnboarding();else if(screen==5)showSettings();}")
-            s=s.replace("الإصدار 1.3.0","الإصدار 1.5.3").replace("الإصدار 1.5.0","الإصدار 1.5.3").replace("الإصدار 1.5.1","الإصدار 1.5.3").replace("الإصدار 1.5.2","الإصدار 1.5.3")
+            s=s.replace("الإصدار 1.3.0","الإصدار 1.5.4").replace("الإصدار 1.5.0","الإصدار 1.5.4").replace("الإصدار 1.5.1","الإصدار 1.5.4").replace("الإصدار 1.5.2","الإصدار 1.5.4").replace("الإصدار 1.5.3","الإصدار 1.5.4")
             f.writeText(s)
         }
     }
@@ -74,4 +74,4 @@ tasks.matching { it.name == "preBuild" }.configureEach {
     dependsOn(prepareNearbyMosques)
 }
 
-// AQIM 1.5.3 review build based on the same com.shahboun.aqim project
+// AQIM 1.5.4 review build based on the same com.shahboun.aqim project
