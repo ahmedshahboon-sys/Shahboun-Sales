@@ -18,6 +18,8 @@
     <activity android:name=".AdhanPickerActivity" android:screenOrientation="unspecified" android:exported="false" />
     <activity android:name=".PrayerScheduleActivity" android:screenOrientation="unspecified" android:exported="false" />
     <activity android:name=".QuranActivity" android:screenOrientation="unspecified" android:exported="false" />
+    <activity android:name=".QuranSearchActivity" android:screenOrientation="unspecified" android:exported="false" />
+    <activity android:name=".DhikrLibraryActivity" android:screenOrientation="unspecified" android:exported="false" />
     <activity android:name=".ExternalQuestionActivity" android:screenOrientation="unspecified" android:exported="false" />
     <activity android:name=".IbadatiActivity" android:screenOrientation="unspecified" android:exported="false" />
     <activity android:name=".WorldLocationActivity" android:screenOrientation="unspecified" android:exported="false" />
