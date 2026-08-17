@@ -59,10 +59,18 @@ val prepareSingleDashboardNavigation by tasks.registering {
             s=s.replace("if(id==4){x.setCompoundDrawablesWithIntrinsicBounds(0,0,R.drawable.ic_kaaba,0);x.setCompoundDrawablePadding(dp(5));}","")
             s=s.replace("addBottomNav(root);","")
             s=s.replace("مواقيت 5 أيام","التقويم الشهري")
-            s=s.replace("new String[]{\"تذكير الذكر\",\"المسبحة والفقاعة\",\"الفجر القوي\",\"حصن المسلم\",\"أسماء الله الحسنى\",\"دليل المسلم والأدعية\"},new int[]{6,7,8,9,10,15}","new String[]{\"تذكير الذكر\",\"تذكيرات العبادات\",\"المسبحة والفقاعة\",\"الفجر القوي\",\"حصن المسلم\",\"أسماء الله الحسنى\",\"دليل المسلم والأدعية\"},new int[]{6,16,7,8,9,10,15}")
-            s=s.replace("else if(k==15)in=new Intent(this,MuslimGuideActivity.class);else in=new Intent(this,AboutActivity.class);","else if(k==15)in=new Intent(this,MuslimGuideActivity.class);else if(k==16)in=new Intent(this,WorshipReminderActivity.class);else in=new Intent(this,AboutActivity.class);")
+            s=s.replace("new String[]{\"تذكير الذكر\",\"المسبحة والفقاعة\",\"الفجر القوي\",\"حصن المسلم\",\"أسماء الله الحسنى\",\"دليل المسلم والأدعية\"},new int[]{6,7,8,9,10,15}","new String[]{\"تذكير الذكر\",\"تذكيرات العبادات\",\"المسبحة والفقاعة\",\"الفجر القوي\",\"مكتبة الأذكار\",\"أسماء الله الحسنى\",\"دليل المسلم والأدعية\"},new int[]{6,16,7,8,17,10,15}")
+            s=s.replace("else if(k==15)in=new Intent(this,MuslimGuideActivity.class);else in=new Intent(this,AboutActivity.class);","else if(k==15)in=new Intent(this,MuslimGuideActivity.class);else if(k==16)in=new Intent(this,WorshipReminderActivity.class);else if(k==17)in=new Intent(this,DhikrLibraryActivity.class);else in=new Intent(this,AboutActivity.class);")
             s=s.replace("الإصدار 1.5.4","الإصدار 1.5.6").replace("الإصدار 1.5.5","الإصدار 1.5.6")
             d.writeText(s)
+        }
+        val q=file("src/main/java/com/shahboun/aqim/QuranActivity.java")
+        if(q.exists()){
+            var s=q.readText()
+            val anchor="Button plan=bt(\"خطة الختمة والورد اليومي\");plan.setOnClickListener(v->showPlan());add(r,plan);"
+            val repl="Button searchText=bt(\"بحث داخل نص القرآن\");searchText.setOnClickListener(v->startActivity(new Intent(this,QuranSearchActivity.class)));add(r,searchText);"+anchor
+            if(!s.contains("بحث داخل نص القرآن"))s=s.replace(anchor,repl)
+            q.writeText(s)
         }
     }
 }
