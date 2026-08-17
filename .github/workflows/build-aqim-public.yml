@@ -18,7 +18,7 @@ jobs:
       - run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
       - uses: gradle/actions/setup-gradle@v4
         with: {gradle-version: '8.11.1'}
-      - name: Add Cairo and Quran assets
+      - name: Add Cairo and KFGQPC Quran assets with matching narration fonts
         run: |
           mkdir -p AqimBuild/app/src/main/res/font AqimBuild/app/src/main/assets/quran
           curl -L --fail --retry 3 "https://raw.githubusercontent.com/google/fonts/main/ofl/cairo/Cairo%5Bslnt,wght%5D.ttf" -o AqimBuild/app/src/main/res/font/cairo.ttf
@@ -26,14 +26,28 @@ jobs:
           curl -L --fail --retry 3 "https://raw.githubusercontent.com/thetruetruth/quran-data-kfgqpc/main/hafs/data/hafsData_v18.json" -o AqimBuild/app/src/main/assets/quran/hafs.json
           curl -L --fail --retry 3 "https://raw.githubusercontent.com/thetruetruth/quran-data-kfgqpc/main/warsh/data/warshData_v10.json" -o AqimBuild/app/src/main/assets/quran/warsh.json
           curl -L --fail --retry 3 "https://raw.githubusercontent.com/thetruetruth/quran-data-kfgqpc/main/shouba/data/ShoubaData08.json" -o AqimBuild/app/src/main/assets/quran/shouba.json
-      - name: Validate Quran asset structure
+          curl -L --fail --retry 3 "https://raw.githubusercontent.com/thetruetruth/quran-data-kfgqpc/main/qaloon/font/qaloon.10.ttf" -o AqimBuild/app/src/main/res/font/quran_qaloon.ttf
+          curl -L --fail --retry 3 "https://raw.githubusercontent.com/thetruetruth/quran-data-kfgqpc/main/hafs/font/hafs.18.ttf" -o AqimBuild/app/src/main/res/font/quran_hafs.ttf
+          curl -L --fail --retry 3 "https://raw.githubusercontent.com/thetruetruth/quran-data-kfgqpc/main/warsh/font/warsh.10.ttf" -o AqimBuild/app/src/main/res/font/quran_warsh.ttf
+          curl -L --fail --retry 3 "https://raw.githubusercontent.com/thetruetruth/quran-data-kfgqpc/main/shouba/font/shouba.8.ttf" -o AqimBuild/app/src/main/res/font/quran_shouba.ttf
+      - name: Validate Quran data and narration fonts
         run: |
           python3 - <<'PY'
-          import json,glob
+          import json,glob,os
           for f in glob.glob('AqimBuild/app/src/main/assets/quran/*.json'):
             d=json.load(open(f,encoding='utf-8'))
-            assert isinstance(d,list) and len(d)>6000
-            assert {int(x.get('sura_no',x.get('sora',0))) for x in d}==set(range(1,115))
+            assert isinstance(d,list) and len(d)>6000, f
+            suras={int(x.get('sura_no',x.get('sora',0))) for x in d}
+            assert suras==set(range(1,115)), (f,len(suras))
+            per={}
+            for x in d:
+              s=int(x.get('sura_no',x.get('sora',0))); a=int(x.get('aya_no',0)); text=str(x.get('aya_text','')).strip()
+              assert 1<=s<=114 and a>=1 and text, (f,s,a)
+              if s in per: assert a>=per[s], (f,s,a,per[s])
+              per[s]=a
+          for f in glob.glob('AqimBuild/app/src/main/res/font/quran_*.ttf'):
+            assert os.path.getsize(f)>200000, (f,os.path.getsize(f))
+          assert len(glob.glob('AqimBuild/app/src/main/res/font/quran_*.ttf'))==4
           PY
       - name: Patch AQIM runtime UI
         run: |
@@ -48,9 +62,6 @@ jobs:
           old='loadFont();requestRuntimePermissions();if(!getSharedPreferences(PREF,MODE_PRIVATE).getBoolean("onboarded",false))showOnboarding();else showHome();scheduleAll(this);startStatusIfEnabled();handler.post(tick);'
           new='loadFont();requestRuntimePermissions();String target=getIntent().getStringExtra("target");boolean onboarded=getSharedPreferences(PREF,MODE_PRIVATE).getBoolean("onboarded",false);if(!onboarded||"onboarding".equals(target))showOnboarding();else if("settings".equals(target))showSettings();else if("tasbih".equals(target))showTasbih();else if("prayers".equals(target))showPrayerTimes();else if("about".equals(target))showAbout();else finish();scheduleAll(this);startStatusIfEnabled();handler.post(tick);'
           if old in s:s=s.replace(old,new)
-          old_picker='String[][] a={{"mecca2013","المسجد الحرام – مكة"},{"prophet","المسجد النبوي – المدينة"},{"classic","أذان كلاسيكي"},{"africa","أذان مرخص – إفريقيا"},{"default","أذان مفتوح CC0"},{"custom","ملف من الهاتف"}};'
-          new_picker='String[][] a={{"abdelrahman_alqodai","عبدالرحمن القضاعي"},{"islam_sobhi","إسلام صبحي"},{"omar_hisham","عمر هشام العربي"},{"nasser_alqatami","ناصر القطامي"},{"yasser_aldosari","ياسر الدوسري"},{"custom","ملف من الهاتف"}};'
-          s=s.replace(old_picker,new_picker)
           start=s.find('    void showAdhanPicker(boolean fajr){')
           end=s.find('\n    String adhanLabel(',start)
           if start!=-1 and end!=-1:
