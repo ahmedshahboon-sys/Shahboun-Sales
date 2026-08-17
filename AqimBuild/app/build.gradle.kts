@@ -9,8 +9,8 @@ android {
         applicationId = "com.shahboun.aqim"
         minSdk = 24
         targetSdk = 36
-        versionCode = 12
-        versionName = "1.5.6"
+        versionCode = 13
+        versionName = "1.5.7"
     }
     buildTypes { release { isMinifyEnabled = false } }
 }
@@ -49,12 +49,12 @@ val prepareSingleDashboardNavigation by tasks.registering {
             s=s.replace("city.setOnClickListener(v->showCityPicker());","city.setOnClickListener(v->startActivity(new Intent(this,WorldLocationActivity.class)));")
             s=s.replace("@Override protected void onResume(){super.onResume();if(screen==7)showOnboarding();}","@Override protected void onResume(){super.onResume();if(screen==7)showOnboarding();else if(screen==5)showSettings();}")
             s=s.replace("getSharedPreferences(PREF,MODE_PRIVATE).edit().putBoolean(\"onboarded\",true).apply();startStatusIfEnabled();scheduleAll(this);showHome();","getSharedPreferences(PREF,MODE_PRIVATE).edit().putBoolean(\"onboarded\",true).apply();startStatusIfEnabled();scheduleAll(this);showSettings();")
-            val oldTimes="static LinkedHashMap<String,Calendar> todayTimes(Context c){return timesFor(c,Calendar.getInstance(TimeZone.getTimeZone(\"Africa/Tripoli\")));}static LinkedHashMap<String,Calendar> timesFor(Context c,Calendar d){double[]ll=currentLatLon(c);return PrayerTimes.calculate(d,ll[0],ll[1],offsets(c));}"
-            val newTimes="static LinkedHashMap<String,Calendar> todayTimes(Context c){return timesFor(c,Calendar.getInstance(TimeZone.getTimeZone(c.getSharedPreferences(PREF,MODE_PRIVATE).getString(\"tzId\",TimeZone.getDefault().getID()))));}static LinkedHashMap<String,Calendar> timesFor(Context c,Calendar d){double[]ll=currentLatLon(c);LinkedHashMap<String,Calendar> base=PrayerTimes.calculate(d,ll[0],ll[1],offsets(c));return LibyaPrayerCalibration.apply(d,ll[0],ll[1],base);}"
-            s=s.replace(oldTimes,newTimes)
-            val oldTimesDynamic="static LinkedHashMap<String,Calendar> todayTimes(Context c){return timesFor(c,Calendar.getInstance(TimeZone.getTimeZone(c.getSharedPreferences(PREF,MODE_PRIVATE).getString(\"tzId\",TimeZone.getDefault().getID()))));}static LinkedHashMap<String,Calendar> timesFor(Context c,Calendar d){double[]ll=currentLatLon(c);return PrayerTimes.calculate(d,ll[0],ll[1],offsets(c));}"
-            s=s.replace(oldTimesDynamic,newTimes)
-            s=s.replace("الإصدار 1.3.0","الإصدار 1.5.6").replace("الإصدار 1.5.0","الإصدار 1.5.6").replace("الإصدار 1.5.1","الإصدار 1.5.6").replace("الإصدار 1.5.2","الإصدار 1.5.6").replace("الإصدار 1.5.3","الإصدار 1.5.6").replace("الإصدار 1.5.4","الإصدار 1.5.6").replace("الإصدار 1.5.5","الإصدار 1.5.6")
+            val legacy1="static LinkedHashMap<String,Calendar> todayTimes(Context c){return timesFor(c,Calendar.getInstance(TimeZone.getTimeZone(\"Africa/Tripoli\")));}static LinkedHashMap<String,Calendar> timesFor(Context c,Calendar d){double[]ll=currentLatLon(c);return PrayerTimes.calculate(d,ll[0],ll[1],offsets(c));}"
+            val legacy2="static LinkedHashMap<String,Calendar> todayTimes(Context c){return timesFor(c,Calendar.getInstance(TimeZone.getTimeZone(c.getSharedPreferences(PREF,MODE_PRIVATE).getString(\"tzId\",TimeZone.getDefault().getID()))));}static LinkedHashMap<String,Calendar> timesFor(Context c,Calendar d){double[]ll=currentLatLon(c);LinkedHashMap<String,Calendar> base=PrayerTimes.calculate(d,ll[0],ll[1],offsets(c));return LibyaPrayerCalibration.apply(d,ll[0],ll[1],base);}"
+            val legacy3="static LinkedHashMap<String,Calendar> todayTimes(Context c){return timesFor(c,Calendar.getInstance(TimeZone.getTimeZone(c.getSharedPreferences(PREF,MODE_PRIVATE).getString(\"tzId\",TimeZone.getDefault().getID()))));}static LinkedHashMap<String,Calendar> timesFor(Context c,Calendar d){double[]ll=currentLatLon(c);return PrayerTimes.calculate(d,ll[0],ll[1],offsets(c));}"
+            val exact="static LinkedHashMap<String,Calendar> todayTimes(Context c){double[] ll=currentLatLon(c);TimeZone tz=LibyaPrayerTables.isLibya(ll[0],ll[1])?TimeZone.getTimeZone(\"Africa/Tripoli\"):TimeZone.getTimeZone(c.getSharedPreferences(PREF,MODE_PRIVATE).getString(\"tzId\",TimeZone.getDefault().getID()));return timesFor(c,Calendar.getInstance(tz));}static LinkedHashMap<String,Calendar> timesFor(Context c,Calendar d){double[]ll=currentLatLon(c);int[] off=offsets(c);LinkedHashMap<String,Calendar> libya=LibyaPrayerTables.calculate(c,d,ll[0],ll[1],off);if(libya!=null)return libya;return PrayerTimes.calculate(d,ll[0],ll[1],off);}"
+            s=s.replace(legacy1,exact).replace(legacy2,exact).replace(legacy3,exact)
+            s=s.replace("الإصدار 1.3.0","الإصدار 1.5.7").replace("الإصدار 1.5.0","الإصدار 1.5.7").replace("الإصدار 1.5.1","الإصدار 1.5.7").replace("الإصدار 1.5.2","الإصدار 1.5.7").replace("الإصدار 1.5.3","الإصدار 1.5.7").replace("الإصدار 1.5.4","الإصدار 1.5.7").replace("الإصدار 1.5.5","الإصدار 1.5.7").replace("الإصدار 1.5.6","الإصدار 1.5.7")
             f.writeText(s)
         }
         val d=file("src/main/java/com/shahboun/aqim/DashboardActivity.java")
@@ -66,7 +66,7 @@ val prepareSingleDashboardNavigation by tasks.registering {
             s=s.replace("مواقيت 5 أيام","التقويم الشهري")
             s=s.replace("new String[]{\"تذكير الذكر\",\"المسبحة والفقاعة\",\"الفجر القوي\",\"حصن المسلم\",\"أسماء الله الحسنى\",\"دليل المسلم والأدعية\"},new int[]{6,7,8,9,10,15}","new String[]{\"تذكير الذكر\",\"تذكيرات العبادات\",\"المسبحة والفقاعة\",\"الفجر القوي\",\"مكتبة الأذكار\",\"أسماء الله الحسنى\",\"دليل المسلم والأدعية\"},new int[]{6,16,7,8,17,10,15}")
             s=s.replace("else if(k==15)in=new Intent(this,MuslimGuideActivity.class);else in=new Intent(this,AboutActivity.class);","else if(k==15)in=new Intent(this,MuslimGuideActivity.class);else if(k==16)in=new Intent(this,WorshipReminderActivity.class);else if(k==17)in=new Intent(this,DhikrLibraryActivity.class);else in=new Intent(this,AboutActivity.class);")
-            s=s.replace("الإصدار 1.5.4","الإصدار 1.5.6").replace("الإصدار 1.5.5","الإصدار 1.5.6")
+            s=s.replace("الإصدار 1.5.4","الإصدار 1.5.7").replace("الإصدار 1.5.5","الإصدار 1.5.7").replace("الإصدار 1.5.6","الإصدار 1.5.7")
             d.writeText(s)
         }
         val q=file("src/main/java/com/shahboun/aqim/QuranActivity.java")
@@ -101,4 +101,4 @@ tasks.matching { it.name == "preBuild" }.configureEach {
     dependsOn(prepareNearbyMosques)
 }
 
-// AQIM 1.5.6 review build based on the same com.shahboun.aqim project
+// AQIM 1.5.7 review build based on the same com.shahboun.aqim project
