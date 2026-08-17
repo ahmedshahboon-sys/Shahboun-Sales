@@ -9,8 +9,8 @@ android {
         applicationId = "com.shahboun.aqim"
         minSdk = 24
         targetSdk = 36
-        versionCode = 8
-        versionName = "1.5.2"
+        versionCode = 9
+        versionName = "1.5.3"
     }
     buildTypes { release { isMinifyEnabled = false } }
 }
@@ -31,15 +31,20 @@ val prepareSingleDashboardNavigation by tasks.registering {
         val f=file("src/main/java/com/shahboun/aqim/MainActivity.java")
         if(f.exists()){
             var s=f.readText()
-            s=s.replace(
-                "@Override public void onBackPressed(){if(screen!=0){if(testActive)stopAdhan();showHome();}else super.onBackPressed();}",
-                "@Override public void onBackPressed(){if(testActive)stopAdhan();finish();}"
-            )
-            s=s.replace(
-                "back.setOnClickListener(v->{if(testActive)stopAdhan();showHome();});",
-                "back.setOnClickListener(v->{if(testActive)stopAdhan();finish();});"
-            )
-            s=s.replace("الإصدار 1.3.0","الإصدار 1.5.2").replace("الإصدار 1.5.0","الإصدار 1.5.2").replace("الإصدار 1.5.1","الإصدار 1.5.2")
+            val oldBack="@Override public void onBackPressed(){if(screen!=0){if(testActive)stopAdhan();showHome();}else super.onBackPressed();}"
+            val oldFinish="@Override public void onBackPressed(){if(testActive)stopAdhan();finish();}"
+            val newBack="@Override public void onBackPressed(){if(testActive)stopAdhan();goBackInternal();}"
+            s=s.replace(oldBack,newBack).replace(oldFinish,newBack)
+            val oldButton="back.setOnClickListener(v->{if(testActive)stopAdhan();showHome();});"
+            val oldButtonFinish="back.setOnClickListener(v->{if(testActive)stopAdhan();finish();});"
+            val newButton="back.setOnClickListener(v->{if(testActive)stopAdhan();goBackInternal();});"
+            s=s.replace(oldButton,newButton).replace(oldButtonFinish,newButton)
+            if(!s.contains("void goBackInternal(){")){
+                val marker="    void loadFont(){"
+                val nav="    void goBackInternal(){if(screen==8||screen==9||screen==10||screen==11||screen==12){showSettings();return;}finish();}\n\n"
+                s=s.replace(marker,nav+marker)
+            }
+            s=s.replace("الإصدار 1.3.0","الإصدار 1.5.3").replace("الإصدار 1.5.0","الإصدار 1.5.3").replace("الإصدار 1.5.1","الإصدار 1.5.3").replace("الإصدار 1.5.2","الإصدار 1.5.3")
             f.writeText(s)
         }
     }
@@ -50,4 +55,4 @@ tasks.matching { it.name == "preBuild" }.configureEach {
     dependsOn(prepareSingleDashboardNavigation)
 }
 
-// AQIM 1.5.2 review build based on the same com.shahboun.aqim project
+// AQIM 1.5.3 review build based on the same com.shahboun.aqim project
