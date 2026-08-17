@@ -9,8 +9,8 @@ android {
         applicationId = "com.shahboun.aqim"
         minSdk = 24
         targetSdk = 36
-        versionCode = 7
-        versionName = "1.5.1"
+        versionCode = 8
+        versionName = "1.5.2"
     }
     buildTypes { release { isMinifyEnabled = false } }
 }
@@ -39,7 +39,7 @@ val prepareSingleDashboardNavigation by tasks.registering {
                 "back.setOnClickListener(v->{if(testActive)stopAdhan();showHome();});",
                 "back.setOnClickListener(v->{if(testActive)stopAdhan();finish();});"
             )
-            s=s.replace("الإصدار 1.3.0","الإصدار 1.5.1").replace("الإصدار 1.5.0","الإصدار 1.5.1")
+            s=s.replace("الإصدار 1.3.0","الإصدار 1.5.2").replace("الإصدار 1.5.0","الإصدار 1.5.2").replace("الإصدار 1.5.1","الإصدار 1.5.2")
             f.writeText(s)
         }
     }
@@ -50,4 +50,4 @@ tasks.matching { it.name == "preBuild" }.configureEach {
     dependsOn(prepareSingleDashboardNavigation)
 }
 
-// AQIM 1.5.1 review build based on the same com.shahboun.aqim project
+// AQIM 1.5.2 review build based on the same com.shahboun.aqim project
