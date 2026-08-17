@@ -46,9 +46,18 @@ val prepareSingleDashboardNavigation by tasks.registering {
             }
             s=s.replace("source.setOnClickListener(v->showAdhanPicker(false));","source.setOnClickListener(v->startActivity(new Intent(this,AdhanPickerActivity.class).putExtra(\"fajr\",false)));")
             s=s.replace("fajr.setOnClickListener(v->showAdhanPicker(true));","fajr.setOnClickListener(v->startActivity(new Intent(this,AdhanPickerActivity.class).putExtra(\"fajr\",true)));")
+            s=s.replace("city.setOnClickListener(v->showCityPicker());","city.setOnClickListener(v->startActivity(new Intent(this,WorldLocationActivity.class)));")
             s=s.replace("@Override protected void onResume(){super.onResume();if(screen==7)showOnboarding();}","@Override protected void onResume(){super.onResume();if(screen==7)showOnboarding();else if(screen==5)showSettings();}")
+            s=s.replace("getSharedPreferences(PREF,MODE_PRIVATE).edit().putBoolean(\"onboarded\",true).apply();startStatusIfEnabled();scheduleAll(this);showHome();","getSharedPreferences(PREF,MODE_PRIVATE).edit().putBoolean(\"onboarded\",true).apply();startStatusIfEnabled();scheduleAll(this);showSettings();")
             s=s.replace("الإصدار 1.3.0","الإصدار 1.5.4").replace("الإصدار 1.5.0","الإصدار 1.5.4").replace("الإصدار 1.5.1","الإصدار 1.5.4").replace("الإصدار 1.5.2","الإصدار 1.5.4").replace("الإصدار 1.5.3","الإصدار 1.5.4")
             f.writeText(s)
+        }
+        val d=file("src/main/java/com/shahboun/aqim/DashboardActivity.java")
+        if(d.exists()){
+            var s=d.readText()
+            s=s.replace("🕋 اتجاه القبلة","اتجاه القبلة")
+            s=s.replace("Button x=button(labels[i]);final int id=ids[i];x.setOnClickListener", "Button x=button(labels[i]);final int id=ids[i];if(id==4){x.setCompoundDrawablesWithIntrinsicBounds(0,0,R.drawable.ic_kaaba,0);x.setCompoundDrawablePadding(dp(5));}x.setOnClickListener")
+            d.writeText(s)
         }
     }
 }
