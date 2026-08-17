@@ -9,8 +9,8 @@ android {
         applicationId = "com.shahboun.aqim"
         minSdk = 24
         targetSdk = 36
-        versionCode = 18
-        versionName = "1.6.2"
+        versionCode = 19
+        versionName = "1.6.3"
     }
     buildTypes { release { isMinifyEnabled = false } }
 }
@@ -55,7 +55,7 @@ val prepareLibyaOnlyAqim by tasks.registering {
             val oldExact="static LinkedHashMap<String,Calendar> todayTimes(Context c){double[] ll=currentLatLon(c);TimeZone tz=LibyaPrayerTables.isLibya(ll[0],ll[1])?TimeZone.getTimeZone(\"Africa/Tripoli\"):TimeZone.getTimeZone(c.getSharedPreferences(PREF,MODE_PRIVATE).getString(\"tzId\",TimeZone.getDefault().getID()));return timesFor(c,Calendar.getInstance(tz));}static LinkedHashMap<String,Calendar> timesFor(Context c,Calendar d){double[]ll=currentLatLon(c);int[] off=offsets(c);LinkedHashMap<String,Calendar> libya=LibyaPrayerTables.calculate(c,d,ll[0],ll[1],off);if(libya!=null)return libya;return PrayerTimes.calculate(d,ll[0],ll[1],off);}"
             val exact="static LinkedHashMap<String,Calendar> todayTimes(Context c){return timesFor(c,Calendar.getInstance(TimeZone.getTimeZone(\"Africa/Tripoli\")));}static LinkedHashMap<String,Calendar> timesFor(Context c,Calendar d){double[]ll=currentLatLon(c);int[] off=offsets(c);LinkedHashMap<String,Calendar> libya=LibyaPrayerTables.calculate(c,d,ll[0],ll[1],off);return libya!=null?libya:new LinkedHashMap<String,Calendar>();}"
             s=s.replace(legacy1,exact).replace(legacy2,exact).replace(legacy3,exact).replace(oldExact,exact)
-            s=s.replace("الإصدار 1.3.0","الإصدار 1.6.2").replace("الإصدار 1.5.0","الإصدار 1.6.2").replace("الإصدار 1.5.1","الإصدار 1.6.2").replace("الإصدار 1.5.2","الإصدار 1.6.2").replace("الإصدار 1.5.3","الإصدار 1.6.2").replace("الإصدار 1.5.4","الإصدار 1.6.2").replace("الإصدار 1.5.5","الإصدار 1.6.2").replace("الإصدار 1.5.6","الإصدار 1.6.2").replace("الإصدار 1.5.7","الإصدار 1.6.2").replace("الإصدار 1.5.8","الإصدار 1.6.2").replace("الإصدار 1.5.9","الإصدار 1.6.2").replace("الإصدار 1.6.0","الإصدار 1.6.2").replace("الإصدار 1.6.1","الإصدار 1.6.2")
+            s=s.replace("الإصدار 1.3.0","الإصدار 1.6.3").replace("الإصدار 1.5.0","الإصدار 1.6.3").replace("الإصدار 1.5.1","الإصدار 1.6.3").replace("الإصدار 1.5.2","الإصدار 1.6.3").replace("الإصدار 1.5.3","الإصدار 1.6.3").replace("الإصدار 1.5.4","الإصدار 1.6.3").replace("الإصدار 1.5.5","الإصدار 1.6.3").replace("الإصدار 1.5.6","الإصدار 1.6.3").replace("الإصدار 1.5.7","الإصدار 1.6.3").replace("الإصدار 1.5.8","الإصدار 1.6.3").replace("الإصدار 1.5.9","الإصدار 1.6.3").replace("الإصدار 1.6.0","الإصدار 1.6.3").replace("الإصدار 1.6.1","الإصدار 1.6.3").replace("الإصدار 1.6.2","الإصدار 1.6.3")
             f.writeText(s)
         }
         val q=file("src/main/java/com/shahboun/aqim/QuranActivity.java")
@@ -63,6 +63,7 @@ val prepareLibyaOnlyAqim by tasks.registering {
             var s=q.readText()
             s=s.replace("String[] keys={\"qaloon\",\"hafs\",\"warsh\",\"shouba\"};String[] labels={\"قالون عن نافع\",\"حفص عن عاصم\",\"ورش عن نافع\",\"شعبة عن عاصم\"};","String[] keys={\"qaloon\",\"hafs\"};String[] labels={\"قالون عن نافع\",\"حفص عن عاصم\"};")
             s=s.replace("key=getSharedPreferences(\"aqim\",0).getString(\"quranRiwaya\",\"qaloon\");","key=getSharedPreferences(\"aqim\",0).getString(\"quranRiwaya\",\"qaloon\");if(!\"qaloon\".equals(key)&&!\"hafs\".equals(key)){key=\"qaloon\";getSharedPreferences(\"aqim\",0).edit().putString(\"quranRiwaya\",key).apply();}")
+            s=s.replace("b.setTextSize(14);b.setBackground(bg(Color.WHITE,18));","b.setTextSize(14);b.setTextColor(T);b.setBackground(bg(Color.WHITE,18));")
             q.writeText(s)
         }
         file("src/main/assets/quran/warsh.json").delete();file("src/main/assets/quran/shouba.json").delete();file("src/main/res/font/quran_warsh.ttf").delete();file("src/main/res/font/quran_shouba.ttf").delete()
@@ -74,4 +75,4 @@ tasks.matching { it.name == "preBuild" }.configureEach {
     dependsOn(prepareLibyaOnlyAqim)
 }
 
-// AQIM 1.6.2 comprehensive video-review repair
+// AQIM 1.6.3 focused UI, Hijri, Quran and settings repair
