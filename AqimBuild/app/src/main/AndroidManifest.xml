@@ -15,6 +15,7 @@
   <application android:allowBackup="true" android:label="أَقِمْ | رفيق المسلم" android:icon="@drawable/aqim_logo" android:roundIcon="@drawable/aqim_logo" android:supportsRtl="true" android:theme="@style/AppTheme">
     <activity android:name=".DashboardActivity" android:screenOrientation="unspecified" android:exported="true"><intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter></activity>
     <activity android:name=".MainActivity" android:screenOrientation="unspecified" android:exported="false" />
+    <activity android:name=".AdhanPickerActivity" android:screenOrientation="unspecified" android:exported="false" />
     <activity android:name=".PrayerScheduleActivity" android:screenOrientation="unspecified" android:exported="false" />
     <activity android:name=".QuranActivity" android:screenOrientation="unspecified" android:exported="false" />
     <activity android:name=".ExternalQuestionActivity" android:screenOrientation="unspecified" android:exported="false" />
