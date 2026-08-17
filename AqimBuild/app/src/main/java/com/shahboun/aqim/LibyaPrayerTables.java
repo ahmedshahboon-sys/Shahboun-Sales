@@ -18,29 +18,30 @@ public final class LibyaPrayerTables {
 
     public static LinkedHashMap<String,Calendar> calculate(Context c,Calendar date,double lat,double lon,int[] offsets){
         if(!isLibya(lat,lon))return null;
-        ensureLoaded(c); if(CITIES.isEmpty())return null;
-        City city=nearest(lat,lon); if(city==null||city.t==null||city.t.length==0)return null;
-        int idx=leapDayIndex(date); if(idx<0||idx>=city.t.length)return null;
+        ensureLoaded(c);if(CITIES.isEmpty())return null;
+        City city=nearest(lat,lon);if(city==null||city.t==null||city.t.length==0)return null;
+        int idx=leapDayIndex(date);if(idx<0||idx>=city.t.length)return null;
         TimeZone tz=TimeZone.getTimeZone("Africa/Tripoli");
         LinkedHashMap<String,Calendar> out=new LinkedHashMap<>();
         for(int i=0;i<6;i++){
             int mins=city.t[idx][i]+manualOffset(offsets,i);
-            Calendar x=Calendar.getInstance(tz); x.clear();
+            Calendar x=Calendar.getInstance(tz);x.clear();
             x.set(date.get(Calendar.YEAR),date.get(Calendar.MONTH),date.get(Calendar.DAY_OF_MONTH),0,0,0);
-            x.add(Calendar.MINUTE,mins); out.put(NAMES[i],x);
-            if(i==4)out.put("الغروب",(Calendar)x.clone());
+            x.add(Calendar.MINUTE,mins);
+            if(i==4){out.put("الغروب",(Calendar)x.clone());out.put("المغرب",x);}else out.put(NAMES[i],x);
         }
         return out;
     }
 
     static int manualOffset(int[] o,int tableIndex){
         if(o==null)return 0;
-        // Existing AQIM offset order follows fajr,sunrise,dhuhr,asr,maghrib,isha (+ optional sunset).
-        return tableIndex<o.length?o[tableIndex]:0;
+        // AQIM's original order is fajr,sunrise,dhuhr,asr,sunset,maghrib,isha.
+        int sourceIndex=tableIndex<4?tableIndex:(tableIndex==4?5:6);
+        return sourceIndex<o.length?o[sourceIndex]:0;
     }
 
     static int leapDayIndex(Calendar d){
-        Calendar x=Calendar.getInstance(TimeZone.getTimeZone("Africa/Tripoli")); x.clear();
+        Calendar x=Calendar.getInstance(TimeZone.getTimeZone("Africa/Tripoli"));x.clear();
         x.set(2024,d.get(Calendar.MONTH),d.get(Calendar.DAY_OF_MONTH),12,0,0);
         return x.get(Calendar.DAY_OF_YEAR)-1;
     }
