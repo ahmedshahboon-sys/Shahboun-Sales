@@ -23,6 +23,7 @@
     <activity android:name=".WorldLocationActivity" android:screenOrientation="unspecified" android:exported="false" />
     <activity android:name=".LiveQiblaActivity" android:screenOrientation="unspecified" android:exported="false" />
     <activity android:name=".DhikrSettingsActivity" android:screenOrientation="unspecified" android:exported="false" />
+    <activity android:name=".WorshipReminderActivity" android:screenOrientation="unspecified" android:exported="false" />
     <activity android:name=".StrongFajrActivity" android:screenOrientation="unspecified" android:exported="false" android:showWhenLocked="true" android:turnScreenOn="true" android:excludeFromRecents="true" />
     <activity android:name=".StrongFajrSettingsActivity" android:screenOrientation="unspecified" android:exported="false" />
     <activity android:name=".IslamicToolsActivity" android:screenOrientation="unspecified" android:exported="false" />
@@ -38,6 +39,7 @@
     <receiver android:name=".PrayerActionReceiver" android:exported="false" />
     <receiver android:name=".PrayerQuestionReceiver" android:exported="false" />
     <receiver android:name=".DhikrReminderReceiver" android:exported="false" />
+    <receiver android:name=".WorshipReminderReceiver" android:exported="false" />
     <receiver android:name=".PrayerWidget" android:exported="true"><intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter><meta-data android:name="android.appwidget.provider" android:resource="@xml/aqim_widget_info" /></receiver>
   </application>
 </manifest>
