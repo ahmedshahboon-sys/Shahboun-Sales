@@ -23,11 +23,13 @@ public final class PrayerTimes {
         }
     }
 
-    private static final int[] LIBYA_CAL = {7,-1,3,-1,3,3,4};
+    // Small Libya reference calibration applied after the astronomical calculation.
+    // Order: fajr, sunrise, dhuhr, asr, sunset, maghrib, isha.
+    private static final int[] LIBYA_CAL = {1,-1,3,2,2,2,2};
 
     public static LinkedHashMap<String, Calendar> calculate(Calendar date,double lat,double lon,int[] offsets){
         Method method=isLibya(lat,lon)?Method.LIBYA:Method.MWL;
-        return calculate(date,lat,lon,offsets,true,false,method);
+        return calculate(date,lat,lon,offsets,true,isLibya(lat,lon),method);
     }
 
     public static LinkedHashMap<String, Calendar> calculate(Calendar date,double lat,double lon,int[] offsets,boolean shafii,boolean libyaCalibration){
