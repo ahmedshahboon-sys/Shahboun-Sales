@@ -44,6 +44,9 @@ val prepareSingleDashboardNavigation by tasks.registering {
                 val nav="    void goBackInternal(){if(screen==8||screen==9||screen==10||screen==11||screen==12){showSettings();return;}finish();}\n\n"
                 s=s.replace(marker,nav+marker)
             }
+            s=s.replace("source.setOnClickListener(v->showAdhanPicker(false));","source.setOnClickListener(v->startActivity(new Intent(this,AdhanPickerActivity.class).putExtra(\"fajr\",false)));")
+            s=s.replace("fajr.setOnClickListener(v->showAdhanPicker(true));","fajr.setOnClickListener(v->startActivity(new Intent(this,AdhanPickerActivity.class).putExtra(\"fajr\",true)));")
+            s=s.replace("@Override protected void onResume(){super.onResume();if(screen==7)showOnboarding();}","@Override protected void onResume(){super.onResume();if(screen==7)showOnboarding();else if(screen==5)showSettings();}")
             s=s.replace("الإصدار 1.3.0","الإصدار 1.5.3").replace("الإصدار 1.5.0","الإصدار 1.5.3").replace("الإصدار 1.5.1","الإصدار 1.5.3").replace("الإصدار 1.5.2","الإصدار 1.5.3")
             f.writeText(s)
         }
