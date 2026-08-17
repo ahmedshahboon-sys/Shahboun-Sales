@@ -9,8 +9,8 @@ android {
         applicationId = "com.shahboun.aqim"
         minSdk = 24
         targetSdk = 36
-        versionCode = 15
-        versionName = "1.5.9"
+        versionCode = 16
+        versionName = "1.6.0"
     }
     buildTypes { release { isMinifyEnabled = false } }
 }
@@ -55,7 +55,7 @@ val prepareLibyaOnlyAqim by tasks.registering {
             val oldExact="static LinkedHashMap<String,Calendar> todayTimes(Context c){double[] ll=currentLatLon(c);TimeZone tz=LibyaPrayerTables.isLibya(ll[0],ll[1])?TimeZone.getTimeZone(\"Africa/Tripoli\"):TimeZone.getTimeZone(c.getSharedPreferences(PREF,MODE_PRIVATE).getString(\"tzId\",TimeZone.getDefault().getID()));return timesFor(c,Calendar.getInstance(tz));}static LinkedHashMap<String,Calendar> timesFor(Context c,Calendar d){double[]ll=currentLatLon(c);int[] off=offsets(c);LinkedHashMap<String,Calendar> libya=LibyaPrayerTables.calculate(c,d,ll[0],ll[1],off);if(libya!=null)return libya;return PrayerTimes.calculate(d,ll[0],ll[1],off);}"
             val exact="static LinkedHashMap<String,Calendar> todayTimes(Context c){return timesFor(c,Calendar.getInstance(TimeZone.getTimeZone(\"Africa/Tripoli\")));}static LinkedHashMap<String,Calendar> timesFor(Context c,Calendar d){double[]ll=currentLatLon(c);int[] off=offsets(c);LinkedHashMap<String,Calendar> libya=LibyaPrayerTables.calculate(c,d,ll[0],ll[1],off);return libya!=null?libya:new LinkedHashMap<String,Calendar>();}"
             s=s.replace(legacy1,exact).replace(legacy2,exact).replace(legacy3,exact).replace(oldExact,exact)
-            s=s.replace("الإصدار 1.3.0","الإصدار 1.5.9").replace("الإصدار 1.5.0","الإصدار 1.5.9").replace("الإصدار 1.5.1","الإصدار 1.5.9").replace("الإصدار 1.5.2","الإصدار 1.5.9").replace("الإصدار 1.5.3","الإصدار 1.5.9").replace("الإصدار 1.5.4","الإصدار 1.5.9").replace("الإصدار 1.5.5","الإصدار 1.5.9").replace("الإصدار 1.5.6","الإصدار 1.5.9").replace("الإصدار 1.5.7","الإصدار 1.5.9").replace("الإصدار 1.5.8","الإصدار 1.5.9")
+            s=s.replace("الإصدار 1.3.0","الإصدار 1.6.0").replace("الإصدار 1.5.0","الإصدار 1.6.0").replace("الإصدار 1.5.1","الإصدار 1.6.0").replace("الإصدار 1.5.2","الإصدار 1.6.0").replace("الإصدار 1.5.3","الإصدار 1.6.0").replace("الإصدار 1.5.4","الإصدار 1.6.0").replace("الإصدار 1.5.5","الإصدار 1.6.0").replace("الإصدار 1.5.6","الإصدار 1.6.0").replace("الإصدار 1.5.7","الإصدار 1.6.0").replace("الإصدار 1.5.8","الإصدار 1.6.0").replace("الإصدار 1.5.9","الإصدار 1.6.0")
             f.writeText(s)
         }
         val q=file("src/main/java/com/shahboun/aqim/QuranActivity.java")
@@ -74,4 +74,4 @@ tasks.matching { it.name == "preBuild" }.configureEach {
     dependsOn(prepareLibyaOnlyAqim)
 }
 
-// AQIM 1.5.9 Libya-only clean review build
+// AQIM 1.6.0 Libya-only settings and notification overhaul
