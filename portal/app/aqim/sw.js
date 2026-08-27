@@ -1,5 +1,5 @@
-const CACHE='aqim-1.6.3-web-v7';
-const CORE=['./','./index.html','./styles.css','./app-core.js','./deep.js','./quran-engine.js','./manifest.webmanifest','./icon.svg','./data/libya-calibration.b64'];
+const CACHE='aqim-1.6.3-web-v8';
+const CORE=['./','./index.html','./styles.css','./app-core.js','./deep.js','./quran-engine.js','./runtime.js','./manifest.webmanifest','./icon.svg','./data/libya-calibration.b64'];
 self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(CORE)).then(()=>self.skipWaiting())));
 self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE&&k!=='aqim-quran-v1').map(k=>caches.delete(k)))).then(()=>self.clients.claim())));
 self.addEventListener('fetch',e=>{if(e.request.method!=='GET')return;const u=new URL(e.request.url);e.respondWith(caches.match(e.request).then(async hit=>{if(hit)return hit;try{const res=await fetch(e.request);if(res&&res.ok&&(u.origin===location.origin||u.hostname==='quranenc.com'||u.hostname==='api.quranpedia.net')){const target=u.hostname==='api.quranpedia.net'?'aqim-quran-v1':CACHE,c=await caches.open(target);c.put(e.request,res.clone())}return res}catch{if(e.request.mode==='navigate')return caches.match('./index.html');throw new Error('offline')}}))});
