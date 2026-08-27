@@ -1,8 +1,9 @@
 import{createClient}from'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
-import'./ios-call-fix.js';
-import'./enhancements.js';
-import'./social-v2.js';
-import'./calls-v2.js';
+import'./ios-call-fix.js?v=13';
+import'./enhancements.js?v=13';
+import'./social-v2.js?v=13';
+import'./calls-v2.js?v=13';
+import'./call-debug.js?v=13';
 const U='https://uojytcmeqegnlgvlmexx.supabase.co',K='sb_publishable_IB9p4LAK2s7VLW1u55SJQA_pANuxzHl',s=createClient(U,K);
 const e=()=>document.getElementById('email'),p=()=>document.getElementById('password'),m=()=>document.getElementById('authMsg');
 function valid(){const email=(e()?.value||'').trim(),pass=p()?.value||'';if(!email){m().textContent='اكتب البريد الإلكتروني أول.';return null}if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){m().textContent='البريد الإلكتروني مش صحيح.';return null}if(pass.length<6){m().textContent='كلمة المرور لازم تكون 6 خانات أو أكثر.';return null}return{email,password:pass}}
