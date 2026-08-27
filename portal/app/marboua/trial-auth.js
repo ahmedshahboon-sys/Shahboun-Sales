@@ -1,7 +1,7 @@
 import{createClient}from'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+import'./ios-call-fix.js';
 import'./enhancements.js';
 import'./social-v2.js';
-import'./ios-call-fix.js';
 import'./calls-v2.js';
 const U='https://uojytcmeqegnlgvlmexx.supabase.co',K='sb_publishable_IB9p4LAK2s7VLW1u55SJQA_pANuxzHl',s=createClient(U,K);
 const e=()=>document.getElementById('email'),p=()=>document.getElementById('password'),m=()=>document.getElementById('authMsg');
