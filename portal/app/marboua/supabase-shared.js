@@ -7,6 +7,13 @@ function wrapQuery(q){
   return new Proxy(q,{
     get(target,prop){
       if(prop==='catch')return fn=>Promise.resolve(target).catch(fn);
+      // Avoid PostgREST object-response 4xx edge cases: fetch max one row and normalize locally.
+      if(prop==='maybeSingle')return async()=>{
+        const base=typeof target.limit==='function'?target.limit(1):target;
+        const res=await Promise.resolve(base);
+        const data=Array.isArray(res?.data)?(res.data[0]??null):(res?.data??null);
+        return {...res,data};
+      };
       const value=target[prop];
       if(typeof value!=='function')return value;
       if(prop==='then'||prop==='finally')return value.bind(target);
