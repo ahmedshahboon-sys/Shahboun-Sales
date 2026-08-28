@@ -1,7 +1,25 @@
-const C='marboua-v22';
-const A=['./','./index.html','./index-v14.html','./app.js','./trial-auth.js','./enhancements.js','./ios-call-fix.js','./calls-v2.js','./social-v2.js','./social.js','./marboua-plus.js','./messages-plus.js','./production.js','./backend-client.js','./call-debug.js','../../debug-core.js','./manifest.webmanifest','./icon.svg'];
-self.addEventListener('install',e=>e.waitUntil((async()=>{const c=await caches.open(C);await Promise.allSettled(A.map(async u=>{try{const r=await fetch(u,{cache:'reload'});if(r.ok)await c.put(u,r.clone())}catch{}}));await self.skipWaiting()})()));
+const C='marboua-v23';
+const A=['./','./index.html','./index-v14.html','./app.js','./trial-auth.js','./enhancements.js','./ios-call-fix.js','./calls-v2.js','./social-v2.js','./social.js','./marboua-plus.js','./messages-plus.js','./production.js','./backend-client.js','./call-debug.js','./supabase-shared.js','../../debug-core.js','./manifest.webmanifest','./icon.svg'];
+const SB="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
+async function runtimeResponse(req){
+  const r=await fetch(req,{cache:'no-store'});
+  if(!r.ok)return r;
+  const u=new URL(req.url);
+  if(u.pathname.endsWith('.js')&&!u.pathname.endsWith('/supabase-shared.js')){
+    const type=r.headers.get('content-type')||'';
+    if(type.includes('javascript')||type.includes('text/plain')||type===''){
+      const src=await r.text();
+      if(src.includes(SB)){
+        const patched=src.split(SB).join('./supabase-shared.js?v=23');
+        return new Response(patched,{status:r.status,statusText:r.statusText,headers:{'content-type':'text/javascript; charset=utf-8','cache-control':'no-store'}});
+      }
+      return new Response(src,{status:r.status,statusText:r.statusText,headers:{'content-type':'text/javascript; charset=utf-8','cache-control':'no-store'}});
+    }
+  }
+  return r;
+}
+self.addEventListener('install',e=>e.waitUntil((async()=>{const c=await caches.open(C);await Promise.allSettled(A.map(async u=>{try{const r=await runtimeResponse(new Request(new URL(u,self.location.href)));if(r.ok)await c.put(u,r.clone())}catch{}}));await self.skipWaiting()})()));
 self.addEventListener('activate',e=>e.waitUntil((async()=>{for(const k of await caches.keys())if(k!==C)await caches.delete(k);await self.clients.claim()})()));
-self.addEventListener('fetch',e=>{if(e.request.method!=='GET')return;const u=new URL(e.request.url);if(u.origin!==location.origin)return;e.respondWith((async()=>{try{const r=await fetch(e.request,{cache:'no-store'});if(r&&r.ok){const c=await caches.open(C);c.put(e.request,r.clone()).catch(()=>{})}return r}catch{const cached=await caches.match(e.request,{ignoreSearch:true});return cached||caches.match('./index.html')}})())});
+self.addEventListener('fetch',e=>{if(e.request.method!=='GET')return;const u=new URL(e.request.url);if(u.origin!==location.origin)return;e.respondWith((async()=>{try{const r=await runtimeResponse(e.request);if(r&&r.ok){const c=await caches.open(C);c.put(e.request,r.clone()).catch(()=>{})}return r}catch{const cached=await caches.match(e.request,{ignoreSearch:true});return cached||caches.match('./index.html')}})())});
 self.addEventListener('push',e=>{let d={};try{d=e.data?.json()||{}}catch{d={body:e.data?.text()||'عندك تنبيه جديد'}}e.waitUntil(self.registration.showNotification(d.title||'مربوعة',{body:d.body||'عندك تنبيه جديد',data:d.url||'./',tag:d.tag||'marboua',renotify:true,icon:d.icon||'./icon.svg',badge:d.badge||'./icon.svg'}))});
 self.addEventListener('notificationclick',e=>{e.notification.close();e.waitUntil(clients.matchAll({type:'window',includeUncontrolled:true}).then(ws=>{for(const w of ws)if('focus'in w)return w.focus();return clients.openWindow(e.notification.data||'./')}))});
