@@ -1,3 +1,4 @@
+import('../../debug-core.js?v=1').catch(()=>{});
 // ===== AQIM v1.6.3 parity layer: Libya calibration, schedule, standby, notifications =====
 let libyaCalibration=null,currentPrayerSnapshot=null,currentSurahNo=null,currentRiwaya='hafs',alarmStamp='';
 const CAL_KEYS={tripoli:'tripoli',benghazi:'banghazi',misrata:'musratah',zawiya:'zawia',khoms:'khomes',sirte:'siret',sabha:'sabha',gharyan:'gherian',derna:'drna',tobruk:'topruq'};
@@ -26,7 +27,5 @@ function renderTranslation(rows){$('translationBox').innerHTML=(rows||[]).map((x
 function loadParitySettings(){if($('dhikrEnabled'))loadDhikrSettings();if($('prayerNotifyGrid'))renderNotificationSettings();let d=new Date();if($('scheduleMonth'))$('scheduleMonth').value=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')}
 const _showView2=showView;showView=function(id){_showView2(id);if(id==='schedule')renderMonthlySchedule();if(id==='standby')updateStandby();if(id==='dhikrsettings')loadDhikrSettings();if(id==='notifications')renderNotificationSettings()}
 loadLibyaCalibration().then(()=>updatePrayers());loadParitySettings();
-// Keep calibrated times authoritative after the older core timer fires.
 setInterval(()=>updatePrayers(),60000);
-// Load the production Quran engine last so it replaces the lightweight APK-preview reader safely.
 import('./quran-engine.js').catch(()=>console.warn('AQIM Quran engine unavailable; core reader remains active.'));
