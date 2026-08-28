@@ -1,5 +1,5 @@
-const C='marboua-v18';
-const A=['./','./index.html','./index-v14.html','./app.js','./trial-auth.js','./enhancements.js','./ios-call-fix.js','./calls-v2.js','./social-v2.js','./social.js','./marboua-plus.js','./messages-plus.js','./call-debug.js','../../debug-core.js','./manifest.webmanifest','./icon.svg'];
+const C='marboua-v19';
+const A=['./','./index.html','./index-v14.html','./app.js','./trial-auth.js','./enhancements.js','./ios-call-fix.js','./calls-v2.js','./social-v2.js','./social.js','./marboua-plus.js','./messages-plus.js','./production.js','./call-debug.js','../../debug-core.js','./manifest.webmanifest','./icon.svg'];
 self.addEventListener('install',e=>e.waitUntil((async()=>{const c=await caches.open(C);await Promise.allSettled(A.map(async u=>{try{const r=await fetch(u,{cache:'reload'});if(r.ok)await c.put(u,r.clone())}catch{}}));await self.skipWaiting()})()));
 self.addEventListener('activate',e=>e.waitUntil((async()=>{for(const k of await caches.keys())if(k!==C)await caches.delete(k);await self.clients.claim()})()));
 self.addEventListener('fetch',e=>{if(e.request.method!=='GET')return;const u=new URL(e.request.url);if(u.origin!==location.origin)return;e.respondWith((async()=>{try{const r=await fetch(e.request,{cache:'no-store'});if(r&&r.ok){const c=await caches.open(C);c.put(e.request,r.clone()).catch(()=>{})}return r}catch{const cached=await caches.match(e.request,{ignoreSearch:true});return cached||caches.match('./index.html')}})())});
