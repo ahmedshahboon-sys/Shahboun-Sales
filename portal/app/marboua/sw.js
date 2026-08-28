@@ -1,4 +1,4 @@
-const C='marboua-v24';
+const C='marboua-v25';
 const A=['./','./index.html','./index-v14.html','./app.js','./trial-auth.js','./enhancements.js','./ios-call-fix.js','./calls-v2.js','./social-v2.js','./social.js','./marboua-plus.js','./messages-plus.js','./production.js','./backend-client.js','./call-debug.js','./ui-v24.js','./supabase-shared.js','../../debug-core.js','./manifest.webmanifest','./icon.svg'];
 const SB="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
 async function runtimeResponse(req){
@@ -8,10 +8,11 @@ async function runtimeResponse(req){
   if(u.pathname.endsWith('.js')&&!u.pathname.endsWith('/supabase-shared.js')){
     const type=r.headers.get('content-type')||'';
     if(type.includes('javascript')||type.includes('text/plain')||type===''){
-      const src=await r.text();
-      if(src.includes(SB)){
-        const patched=src.split(SB).join('./supabase-shared.js?v=24');
-        return new Response(patched,{status:r.status,statusText:r.statusText,headers:{'content-type':'text/javascript; charset=utf-8','cache-control':'no-store'}});
+      let src=await r.text();
+      if(src.includes(SB))src=src.split(SB).join('./supabase-shared.js?v=25');
+      if(u.pathname.endsWith('/social.js')&&src.includes("for(const x of posts||[])loadPostMeta(x.id)")){
+        src=src.replace("for(const x of posts||[])loadPostMeta(x.id)","loadFeedMetaBatch(posts||[])");
+        src+="\nasync function loadFeedMetaBatch(posts){const ids=posts.map(x=>x.id);if(!ids.length)return;const[{data:lr},{data:cr}]=await Promise.all([s.from('marboua_post_reactions').select('post_id').in('post_id',ids),s.from('marboua_post_comments').select('post_id').in('post_id',ids).is('deleted_at',null)]);const l={},c={};for(const x of lr||[])l[x.post_id]=(l[x.post_id]||0)+1;for(const x of cr||[])c[x.post_id]=(c[x.post_id]||0)+1;for(const id of ids){const e=document.getElementById('pc-'+id);if(e)e.textContent=(l[id]||0)+' إعجاب · '+(c[id]||0)+' تعليق'}}\n";
       }
       return new Response(src,{status:r.status,statusText:r.statusText,headers:{'content-type':'text/javascript; charset=utf-8','cache-control':'no-store'}});
     }
