@@ -1,80 +1,47 @@
-// Marboua Social Pro UI v27 — UI/navigation presentation only.
+// Marboua Social Pro UI v28 — UI/navigation only. Never replaces application actions.
 (()=>{
-  const root=document.documentElement;
-  const saved=localStorage.getItem('marboua-theme')||'dark';
-  root.dataset.theme=saved;
-
-  function ensureFinalCss(){
-    if(document.getElementById('mqFinalCss'))return;
-    const l=document.createElement('link');l.id='mqFinalCss';l.rel='stylesheet';l.href='./social-pro-ui.css?v=27';document.head.appendChild(l);
-  }
-
-  function themeButton(){
-    if(document.getElementById('mqThemeBtn'))return;
-    const b=document.createElement('button');b.id='mqThemeBtn';b.type='button';b.title='الوضع الفاتح / الداكن';
-    const paint=()=>{b.innerHTML=root.dataset.theme==='light'?'🌙':'☀️';b.setAttribute('aria-label',root.dataset.theme==='light'?'الوضع الداكن':'الوضع الفاتح')};paint();
-    b.onclick=()=>{root.dataset.theme=root.dataset.theme==='light'?'dark':'light';localStorage.setItem('marboua-theme',root.dataset.theme);paint()};
-    document.body.appendChild(b);
-  }
-
-  const roleFor=(b)=>{
-    const oc=b.getAttribute('onclick')||'',txt=(b.textContent||'').trim();
-    if(b.id==='feedBtn'||oc.includes("socialFeed"))return['home','⌂','الرئيسية'];
-    if(b.id==='notifBtn')return['notifications','♢','الإشعارات'];
-    if(b.id==='globalSearchBtn')return['search','⌕','بحث'];
-    if(b.id==='requestsBtn'||txt.startsWith('طلبات'))return['requests','✉','الطلبات'];
-    if(txt.includes('البلوك'))return['blocked','⊘','المحظورون'];
-    if(oc.includes("'discover'"))return['discover','◎','استكشاف'];
-    if(oc.includes("'chats'"))return['chats','☏','الدردشات'];
-    if(oc.includes("'groups'"))return['groups','♧','المجموعات'];
-    if(oc.includes("'calls'"))return['calls','☎','المكالمات'];
-    if(oc.includes("'invites'"))return['invites','◇','الدعوات'];
-    if(oc.includes("'me'"))return['me','◉','حسابي'];
-    if(oc.includes('logout'))return['logout','↪','خروج'];
-    return null;
-  };
-
-  function decorateNav(){
-    const nav=document.querySelector('.nav');if(!nav)return;
-    nav.querySelectorAll(':scope > button').forEach(b=>{
-      const r=roleFor(b);if(!r)return;const[role,icon,label]=r;b.dataset.uiRole=role;b.dataset.uiLabel=label;
-      if(!b.querySelector('.mqNavIcon')){const i=document.createElement('span');i.className='mqNavIcon';i.textContent=icon;b.prepend(i)}
-      let lab=b.querySelector('.mqNavLabel');if(!lab){lab=document.createElement('span');lab.className='mqNavLabel';b.appendChild(lab)}lab.textContent=label;
-      // hide original naked text nodes so dynamic counts don't create button layout chaos
-      [...b.childNodes].filter(n=>n.nodeType===3).forEach(n=>n.textContent='');
-    });
-  }
-
-  function ensureMore(){
-    if(document.getElementById('mqMoreBtn'))return;
-    const b=document.createElement('button');b.id='mqMoreBtn';b.type='button';b.innerHTML='☰';b.setAttribute('aria-label','المزيد');document.body.appendChild(b);
-    const d=document.createElement('div');d.id='mqMoreDrawer';d.innerHTML='<div class="mqDrawerHead"><b>مربوعة</b><button id="mqMoreClose">×</button></div><div id="mqMoreItems"></div>';document.body.appendChild(d);
-    b.onclick=()=>{syncMore();d.classList.add('open')};d.querySelector('#mqMoreClose').onclick=()=>d.classList.remove('open');
-  }
-
-  function syncMore(){
-    const host=document.getElementById('mqMoreItems'),nav=document.querySelector('.nav');if(!host||!nav)return;host.innerHTML='';
-    const keep=new Set(['home','chats','groups','notifications','me']);
-    nav.querySelectorAll(':scope > button[data-ui-role]').forEach(orig=>{if(keep.has(orig.dataset.uiRole))return;const c=document.createElement('button');c.className='mqDrawerItem';c.innerHTML=`<span>${orig.querySelector('.mqNavIcon')?.textContent||'•'}</span><b>${orig.dataset.uiLabel||''}</b>`;c.onclick=()=>{orig.click();document.getElementById('mqMoreDrawer')?.classList.remove('open')};host.appendChild(c)});
-  }
-
-  function hookShow(){
-    if(typeof window.show!=='function'||window.show.__mq)return;
-    const old=window.show;function wrapped(id,btn){document.body.classList.toggle('mq-chat-focus',id==='chats');const r=old.apply(this,arguments);setTimeout(decorateNav,30);return r}wrapped.__mq=true;window.show=wrapped;
-  }
-
-  function defaultHome(){
-    if(sessionStorage.getItem('mq-home-opened'))return;
-    const main=document.getElementById('main'),feed=document.getElementById('feedBtn');
-    if(main&&!main.classList.contains('hide')&&feed){sessionStorage.setItem('mq-home-opened','1');feed.click()}
-  }
-
-  function compactDebug(){
-    const bar=document.getElementById('shbDbgBar');if(bar){bar.classList.add('mqDbgCompact');const o=document.getElementById('shbDbgOpen');if(o)o.textContent='DBG'}
-    const cb=document.getElementById('marbDbgBtn');if(cb){cb.classList.add('mqCallDbgCompact');cb.textContent='☎ DBG'}
-  }
-
-  function tick(){decorateNav();hookShow();defaultHome();compactDebug();}
-  document.addEventListener('DOMContentLoaded',()=>{ensureFinalCss();themeButton();ensureMore();tick()});
-  let n=0;const t=setInterval(()=>{tick();if(++n>120)clearInterval(t)},250);
+ const root=document.documentElement;
+ root.dataset.theme=localStorage.getItem('marboua-theme')||'dark';
+ const ROLE={
+  feedBtn:['home','⌂','الرئيسية'],notifBtn:['notifications','♢','الإشعارات'],globalSearchBtn:['search','⌕','بحث'],requestsBtn:['requests','✉','الطلبات']
+ };
+ function roleFor(b){
+  if(ROLE[b.id])return ROLE[b.id];
+  const oc=b.getAttribute('onclick')||'',txt=(b.textContent||'').trim();
+  if(oc.includes("show('discover'")||oc.includes('show("discover"'))return['discover','◎','استكشاف'];
+  if(oc.includes("show('chats'")||oc.includes('show("chats"'))return['chats','☏','الدردشات'];
+  if(oc.includes("show('groups'")||oc.includes('show("groups"'))return['groups','♧','المجموعات'];
+  if(oc.includes("show('calls'")||oc.includes('show("calls"'))return['calls','☎','المكالمات'];
+  if(oc.includes("show('invites'")||oc.includes('show("invites"'))return['invites','◇','الدعوات'];
+  if(oc.includes("show('me'")||oc.includes('show("me"'))return['me','◉','حسابي'];
+  if(oc.includes('logout'))return['logout','↪','خروج'];
+  if(txt.startsWith('طلبات'))return['requests','✉','الطلبات'];
+  if(txt.includes('البلوك')||txt.includes('المحظور'))return['blocked','⊘','المحظورون'];
+  return null;
+ }
+ function decorate(){
+  const nav=document.querySelector('.nav');if(!nav)return;
+  nav.querySelectorAll(':scope > button').forEach(b=>{
+   const r=roleFor(b);if(!r)return;
+   const [role,icon,label]=r;b.dataset.uiRole=role;b.dataset.uiLabel=label;b.title=label;b.setAttribute('aria-label',label);
+   let i=b.querySelector('.mqNavIcon');if(!i){i=document.createElement('span');i.className='mqNavIcon';b.prepend(i)}i.textContent=icon;
+   let l=b.querySelector('.mqNavLabel');if(!l){l=document.createElement('span');l.className='mqNavLabel';b.appendChild(l)}l.textContent=label;
+   [...b.childNodes].filter(n=>n.nodeType===Node.TEXT_NODE).forEach(n=>n.remove());
+  });
+ }
+ function theme(){
+  let b=document.getElementById('mqThemeBtn');if(b)return;
+  b=document.createElement('button');b.id='mqThemeBtn';b.type='button';
+  const paint=()=>{const light=root.dataset.theme==='light';b.textContent=light?'🌙':'☀️';b.title=light?'الوضع الداكن':'الوضع الفاتح'};paint();
+  b.onclick=()=>{root.dataset.theme=root.dataset.theme==='light'?'dark':'light';localStorage.setItem('marboua-theme',root.dataset.theme);paint()};document.body.appendChild(b);
+ }
+ function restoreShahboun(){const a=document.querySelector('.top a[href="../../"],.top a[href="../.."],.top a.btn');if(a){a.classList.add('mqShahbounBtn');a.style.removeProperty('display');a.textContent='شهبون'}}
+ function more(){if(document.getElementById('mqMoreBtn'))return;const b=document.createElement('button');b.id='mqMoreBtn';b.type='button';b.textContent='☰';b.title='المزيد';document.body.appendChild(b);const d=document.createElement('div');d.id='mqMoreDrawer';d.innerHTML='<div class="mqDrawerHead"><b>المزيد</b><button id="mqMoreClose">×</button></div><div id="mqMoreItems"></div>';document.body.appendChild(d);b.onclick=()=>{syncMore();d.classList.add('open')};d.querySelector('#mqMoreClose').onclick=()=>d.classList.remove('open')}
+ function syncMore(){const h=document.getElementById('mqMoreItems'),n=document.querySelector('.nav');if(!h||!n)return;h.innerHTML='';const main=new Set(['home','chats','groups','notifications','me']);n.querySelectorAll(':scope > button[data-ui-role]').forEach(o=>{if(main.has(o.dataset.uiRole))return;const c=document.createElement('button');c.className='mqDrawerItem';c.innerHTML=`<span>${o.querySelector('.mqNavIcon')?.textContent||'•'}</span><b>${o.dataset.uiLabel}</b>`;c.onclick=()=>{o.click();document.getElementById('mqMoreDrawer').classList.remove('open')};h.appendChild(c)})}
+ function activeSync(){const n=document.querySelector('.nav');if(!n)return;const active=n.querySelector('.primary[data-ui-role]');if(active)document.body.dataset.mqSection=active.dataset.uiRole}
+ function hookShow(){if(typeof window.show!=='function'||window.show.__mq28)return;const old=window.show;function w(){const r=old.apply(this,arguments);setTimeout(()=>{decorate();activeSync()},0);return r}w.__mq28=true;window.show=w}
+ function defaultFeed(){if(sessionStorage.getItem('mq28-home'))return;const main=document.getElementById('main'),feed=document.getElementById('feedBtn');if(main&&!main.classList.contains('hide')&&feed){sessionStorage.setItem('mq28-home','1');feed.click()}}
+ function debugCompact(){document.getElementById('shbDbgBar')?.classList.add('mqDbgCompact');const c=document.getElementById('marbDbgBtn');if(c)c.classList.add('mqCallDbgCompact')}
+ function tick(){decorate();restoreShahboun();hookShow();activeSync();defaultFeed();debugCompact()}
+ document.addEventListener('DOMContentLoaded',()=>{theme();more();tick()});let i=0;const t=setInterval(()=>{tick();if(++i>160)clearInterval(t)},250);
 })();
