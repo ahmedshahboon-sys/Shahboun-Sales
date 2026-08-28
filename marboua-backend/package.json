@@ -1,0 +1,7 @@
+{
+  "name":"marboua-backend",
+  "private":true,
+  "type":"module",
+  "engines":{"node":">=20"},
+  "dependencies":{"web-push":"^3.6.7"}
+}
