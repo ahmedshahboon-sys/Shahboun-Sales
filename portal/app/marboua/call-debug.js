@@ -2,6 +2,7 @@ import'../../debug-core.js?v=1';
 import'./marboua-plus.js?v=1';
 import'./messages-plus.js?v=1';
 import'./production.js?v=1';
+import'./backend-client.js?v=1';
 import{createClient}from'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 const U='https://uojytcmeqegnlgvlmexx.supabase.co',K='sb_publishable_IB9p4LAK2s7VLW1u55SJQA_pANuxzHl',s=createClient(U,K);
 const logs=[];let me=null,lastCallId=null,timer=null;
