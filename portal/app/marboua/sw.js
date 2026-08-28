@@ -1,5 +1,5 @@
-const C='marboua-v23';
-const A=['./','./index.html','./index-v14.html','./app.js','./trial-auth.js','./enhancements.js','./ios-call-fix.js','./calls-v2.js','./social-v2.js','./social.js','./marboua-plus.js','./messages-plus.js','./production.js','./backend-client.js','./call-debug.js','./supabase-shared.js','../../debug-core.js','./manifest.webmanifest','./icon.svg'];
+const C='marboua-v24';
+const A=['./','./index.html','./index-v14.html','./app.js','./trial-auth.js','./enhancements.js','./ios-call-fix.js','./calls-v2.js','./social-v2.js','./social.js','./marboua-plus.js','./messages-plus.js','./production.js','./backend-client.js','./call-debug.js','./ui-v24.js','./supabase-shared.js','../../debug-core.js','./manifest.webmanifest','./icon.svg'];
 const SB="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
 async function runtimeResponse(req){
   const r=await fetch(req,{cache:'no-store'});
@@ -10,7 +10,7 @@ async function runtimeResponse(req){
     if(type.includes('javascript')||type.includes('text/plain')||type===''){
       const src=await r.text();
       if(src.includes(SB)){
-        const patched=src.split(SB).join('./supabase-shared.js?v=23');
+        const patched=src.split(SB).join('./supabase-shared.js?v=24');
         return new Response(patched,{status:r.status,statusText:r.statusText,headers:{'content-type':'text/javascript; charset=utf-8','cache-control':'no-store'}});
       }
       return new Response(src,{status:r.status,statusText:r.statusText,headers:{'content-type':'text/javascript; charset=utf-8','cache-control':'no-store'}});
