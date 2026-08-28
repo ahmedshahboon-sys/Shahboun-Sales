@@ -1,0 +1,2 @@
+import{json,cors}from'../lib/supabase.js';
+export default async function handler(req,res){if(cors(req,res))return;if(req.method!=='GET')return json(res,405,{error:'method_not_allowed'});return json(res,200,{ok:true,vapidPublicKey:process.env.VAPID_PUBLIC_KEY||null,turnConfigured:!!(process.env.TURN_URLS&&process.env.TURN_USERNAME&&process.env.TURN_CREDENTIAL),pushConfigured:!!(process.env.VAPID_PUBLIC_KEY&&process.env.VAPID_PRIVATE_KEY)})}
