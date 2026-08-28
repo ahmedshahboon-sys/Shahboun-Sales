@@ -1,4 +1,4 @@
-const CACHE='marboua-v32';
+const CACHE='marboua-v33';
 const ASSETS=['./','./index.html','./app.css','./main.js','./supabase-shared.js','./app.js','./calls-v2.js','./ios-call-fix.js','./enhancements.js','./social.js','./marboua-plus.js','./messages-plus.js','./production.js','./backend-client.js','./manifest.webmanifest','./icon.svg'];
 self.addEventListener('install',event=>event.waitUntil((async()=>{const cache=await caches.open(CACHE);await Promise.allSettled(ASSETS.map(async path=>{try{const res=await fetch(new Request(new URL(path,self.location.href)),{cache:'no-store'});if(res.ok)await cache.put(path,res.clone())}catch{}}));await self.skipWaiting()})()));
 self.addEventListener('activate',event=>event.waitUntil((async()=>{for(const key of await caches.keys())if(key!==CACHE)await caches.delete(key);await self.clients.claim()})()));
