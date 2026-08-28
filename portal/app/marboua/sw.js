@@ -1,7 +1,7 @@
-const CACHE='marboua-v33';
+const CACHE='marboua-v34';
 const ASSETS=['./','./index.html','./app.css','./main.js','./supabase-shared.js','./app.js','./calls-v2.js','./ios-call-fix.js','./enhancements.js','./social.js','./marboua-plus.js','./messages-plus.js','./production.js','./backend-client.js','./manifest.webmanifest','./icon.svg'];
-const FRESH=new Set(['/app.css','/main.js','/calls-v2.js','/enhancements.js']);
-function freshRequest(request){const u=new URL(request.url);if([...FRESH].some(x=>u.pathname.endsWith(x)))u.searchParams.set('mqbuild','33');return new Request(u.toString(),request)}
+const FRESH=new Set(['/app.css','/main.js','/calls-v2.js','/ios-call-fix.js','/enhancements.js']);
+function freshRequest(request){const u=new URL(request.url);if([...FRESH].some(x=>u.pathname.endsWith(x)))u.searchParams.set('mqbuild','34');return new Request(u.toString(),request)}
 self.addEventListener('install',event=>event.waitUntil((async()=>{const cache=await caches.open(CACHE);await Promise.allSettled(ASSETS.map(async path=>{try{const req=freshRequest(new Request(new URL(path,self.location.href)));const res=await fetch(req,{cache:'no-store'});if(res.ok)await cache.put(path,res.clone())}catch{}}));await self.skipWaiting()})()));
 self.addEventListener('activate',event=>event.waitUntil((async()=>{for(const key of await caches.keys())if(key!==CACHE)await caches.delete(key);await self.clients.claim()})()));
 self.addEventListener('fetch',event=>{if(event.request.method!=='GET')return;const url=new URL(event.request.url);if(url.origin!==self.location.origin)return;event.respondWith((async()=>{try{const req=freshRequest(event.request),fresh=await fetch(req,{cache:'no-store'});if(fresh.ok){const cache=await caches.open(CACHE);cache.put(event.request,fresh.clone()).catch(()=>{})}return fresh}catch{const cached=await caches.match(event.request,{ignoreSearch:true});return cached||caches.match('./index.html')}})())});
