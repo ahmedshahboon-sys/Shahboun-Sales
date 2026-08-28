@@ -1,4 +1,4 @@
-const C='marboua-v20';
+const C='marboua-v21';
 const A=['./','./index.html','./index-v14.html','./app.js','./trial-auth.js','./enhancements.js','./ios-call-fix.js','./calls-v2.js','./social-v2.js','./social.js','./marboua-plus.js','./messages-plus.js','./production.js','./backend-client.js','./call-debug.js','../../debug-core.js','./manifest.webmanifest','./icon.svg'];
 self.addEventListener('install',e=>e.waitUntil((async()=>{const c=await caches.open(C);await Promise.allSettled(A.map(async u=>{try{const r=await fetch(u,{cache:'reload'});if(r.ok)await c.put(u,r.clone())}catch{}}));await self.skipWaiting()})()));
 self.addEventListener('activate',e=>e.waitUntil((async()=>{for(const k of await caches.keys())if(k!==C)await caches.delete(k);await self.clients.claim()})()));
